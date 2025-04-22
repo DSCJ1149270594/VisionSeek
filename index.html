@@ -4,27 +4,745 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>YOLO11 目标检测</title>
+  <title>VisionSeek - 智能视觉检测平台</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/boxicons@2.1.4/css/boxicons.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/loader.css">
 </head>
 
 <body>
-  <div class="app">
-    <div class="header">
-      <h1>YOLO11 目标检测</h1>
-      <p>使用 TensorFlow.js 实现的 YOLO11 目标检测</p>
-    </div>
+  <!-- 语音控制浮动按钮 -->
+  <div class="floating-button voice-control-btn" id="voiceControlBtn" title="语音控制">
+    <i class="bx bx-microphone"></i>
+  </div>
 
-    <div class="content">
-      <div class="camera-container">
-        <video id="videoElement" autoplay playsinline style="display: none"></video>
-        <canvas id="cameraCanvas"></canvas>
+  <!-- 语音识别状态提示 -->
+  <div class="voice-status" id="voiceStatus">
+    <div class="voice-indicator">
+      <div class="voice-waves"></div>
+      <i class="bx bx-microphone"></i>
+    </div>
+    <p id="voiceText">正在聆听...</p>
+  </div>
+
+  <nav class="navbar navbar-expand-lg navbar-dark fixed-top">
+    <div class="container">
+      <a class="navbar-brand" href="#">
+        <i class="bx bx-camera-movie"></i> VisionSeek
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item">
+            <a class="nav-link active" href="#"><i class="bx bx-home-alt"></i> 首页</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#features"><i class="bx bx-cube-alt"></i> 功能</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#upload-section"><i class="bx bx-upload"></i> 上传模板</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#about"><i class="bx bx-info-circle"></i> 关于</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#contact"><i class="bx bx-envelope"></i> 联系我们</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="row align-items-center">
+        <div class="col-lg-6" data-aos="fade-right" data-aos-duration="1000">
+          <div class="hero-content">
+            <h1>智能视觉检测<br><span class="gradient-text">随时随地</span></h1>
+            <p class="lead">VisionSeek利用先进的人工智能技术，提供高精度视觉识别和检测服务，让您轻松实现对象识别、特征匹配等复杂视觉任务。</p>
+            <div class="d-flex gap-3 flex-wrap">
+              <button id="startDetection" class="btn btn-primary btn-lg pulse-btn">
+                开始检测 <i class="bx bx-right-arrow-alt"></i>
+              </button>
+              <button id="startVoiceBtn" class="btn btn-outline-light btn-lg">
+                <i class="bx bx-microphone"></i> 语音控制
+              </button>
+            </div>
+            <div class="accessibility-note mt-3">
+              <i class="bx bx-info-circle"></i> 支持语音控制，方便视障人士使用
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6" data-aos="fade-left" data-aos-duration="1000" data-aos-delay="200">
+          <div class="hero-image-container">
+            <img src="templates/0003.png" alt="VisionSeek Demo" class="img-fluid rounded-3 shadow-lg hero-image">
+            <div class="floating-shape shape-1"></div>
+            <div class="floating-shape shape-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="hero-wave">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320">
+        <path fill="#ffffff" fill-opacity="1" d="M0,160L48,170.7C96,181,192,203,288,197.3C384,192,480,160,576,165.3C672,171,768,213,864,213.3C960,213,1056,171,1152,149.3C1248,128,1344,128,1392,128L1440,128L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path>
+      </svg>
+    </div>
+  </header>
+
+  <section id="detection-interface" class="py-5" style="display: none;">
+    <div class="container">
+      <h2 class="text-center mb-4" data-aos="fade-up">实时对象检测</h2>
+      <div class="row justify-content-center">
+        <div class="col-lg-8" data-aos="fade-up" data-aos-delay="100">
+          <div class="template-info mb-3 p-3 bg-light rounded">
+            <div class="d-flex align-items-center">
+              <div class="template-image me-3">
+                <img id="currentTemplateImg" src="templates/000001.jpg" alt="当前模板" class="rounded" style="max-height: 60px;">
+              </div>
+              <div class="template-details">
+                <h6 class="mb-1">当前检测目标: <span id="currentTemplateName">默认模板</span></h6>
+                <p class="mb-0 small text-muted">可通过语音命令或上传新模板更改</p>
+              </div>
+              <div class="ms-auto">
+                <button id="changeTemplateBtn" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#templateSelectionModal">
+                  更换模板
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="camera-container shadow rounded-3 overflow-hidden">
+            <video id="videoElement" autoplay playsinline style="display: none"></video>
+            <canvas id="cameraCanvas" class="w-100 h-100"></canvas>
+            <div class="camera-controls">
+              <button id="captureBtn" class="btn btn-light rounded-circle" data-bs-toggle="tooltip" data-bs-placement="top" title="拍照">
+                <i class="bx bxs-camera"></i>
+              </button>
+              <button id="switchCamera" class="btn btn-light rounded-circle" data-bs-toggle="tooltip" data-bs-placement="top" title="切换摄像头">
+                <i class="bx bx-refresh"></i>
+              </button>
+              <button id="speakResultBtn" class="btn btn-light rounded-circle" data-bs-toggle="tooltip" data-bs-placement="top" title="朗读结果">
+                <i class="bx bx-volume-full"></i>
+              </button>
+            </div>
+          </div>
+          <div class="mt-4">
+            <div class="card detection-results">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bx bx-list-check"></i> 检测结果</h5>
+                <span class="badge bg-primary" id="detectionCount">0</span>
+              </div>
+              <div class="card-body">
+                <div id="resultsList" class="results-container"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 新增: 上传模板界面 -->
+  <section id="upload-section" class="py-5 bg-light">
+    <div class="container">
+      <div class="section-heading text-center mb-5" data-aos="fade-up">
+        <span class="subtitle">上传您的物品</span>
+        <h2>创建自定义检测模板</h2>
+        <div class="heading-line"></div>
+        <p class="mt-3">上传您想要检测的物品照片，我们将创建专属模板帮助您快速识别</p>
       </div>
 
-      <div class="detection-results">
-        <h3>检测结果：</h3>
-        <div id="resultsList"></div>
+      <div class="row justify-content-center">
+        <div class="col-lg-8" data-aos="fade-up" data-aos-delay="100">
+          <div class="upload-card">
+            <div class="row">
+              <div class="col-md-6">
+                <div class="upload-preview">
+                  <div id="previewContainer" class="preview-image">
+                    <i class="bx bx-image-add"></i>
+                    <p>预览区域</p>
+                  </div>
+                  <div id="imagePreview" style="display: none;">
+                    <img id="previewImg" src="#" alt="预览图">
+                    <button id="removeImageBtn" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-2">
+                      <i class="bx bx-x"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <form id="templateUploadForm" class="upload-form">
+                  <div class="mb-3">
+                    <label for="templateName" class="form-label">模板名称 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="templateName" placeholder="如：我的钥匙、蓝色水杯" required>
+                    <div class="form-text">给您的物品取个易于识别的名称</div>
+                  </div>
+                  <div class="mb-3">
+                    <label for="templateCategory" class="form-label">物品类别</label>
+                    <select class="form-select" id="templateCategory">
+                      <option value="personal">个人物品</option>
+                      <option value="electronic">电子设备</option>
+                      <option value="document">证件文档</option>
+                      <option value="other">其他物品</option>
+                    </select>
+                  </div>
+                  <div class="mb-3">
+                    <label for="templateDescription" class="form-label">物品描述（可选）</label>
+                    <textarea class="form-control" id="templateDescription" rows="2" placeholder="描述物品的特征，形状、颜色等"></textarea>
+                  </div>
+                  <div class="mb-3">
+                    <label for="templateFile" class="form-label">上传图片 <span class="text-danger">*</span></label>
+                    <input type="file" class="form-control" id="templateFile" accept="image/*" required>
+                    <div class="form-text">支持JPG、PNG格式，最佳分辨率为640×480像素</div>
+                  </div>
+                  <div class="d-grid">
+                    <button type="submit" class="btn btn-primary" id="uploadTemplateBtn">
+                      <i class="bx bx-upload"></i> 上传并创建模板
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-5" data-aos="fade-up">
+            <h4 class="mb-3">我的模板库</h4>
+            <div class="template-gallery" id="templateGallery">
+              <div class="row g-3" id="userTemplates">
+                <!-- 模板卡片将通过JavaScript动态添加 -->
+                <div class="col-6 col-md-4 col-lg-3">
+                  <div class="template-card template-placeholder">
+                    <div class="template-thumbnail d-flex align-items-center justify-content-center">
+                      <i class="bx bx-image"></i>
+                    </div>
+                    <div class="template-info p-2">
+                      <h6 class="template-name">无自定义模板</h6>
+                      <p class="template-date small text-muted">请上传您的第一个模板</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="py-5">
+    <div class="container">
+      <div class="section-heading text-center mb-5" data-aos="fade-up">
+        <span class="subtitle">强大功能</span>
+        <h2>核心功能</h2>
+        <div class="heading-line"></div>
+      </div>
+      <div class="row g-4">
+        <div class="col-md-4" data-aos="fade-up" data-aos-delay="100">
+          <div class="feature-card card-hover" data-bs-toggle="modal" data-bs-target="#objectDetectionModal">
+            <div class="icon-wrapper">
+              <i class="bx bx-search-alt"></i>
+            </div>
+            <h3>智能对象识别</h3>
+            <p>基于YOLO11算法，精准识别80多种常见对象，实时分析场景中的物体。</p>
+            <div class="card-overlay">
+              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4" data-aos="fade-up" data-aos-delay="200">
+          <div class="feature-card card-hover" data-bs-toggle="modal" data-bs-target="#templateMatchingModal">
+            <div class="icon-wrapper">
+              <i class="bx bx-duplicate"></i>
+            </div>
+            <h3>模板匹配</h3>
+            <p>提供高级特征匹配功能，可检测指定物体，即使在不同角度和光照条件下也能精确识别。</p>
+            <div class="card-overlay">
+              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4" data-aos="fade-up" data-aos-delay="300">
+          <div class="feature-card card-hover" data-bs-toggle="modal" data-bs-target="#browserDeployModal">
+            <div class="icon-wrapper">
+              <i class="bx bx-cloud"></i>
+            </div>
+            <h3>浏览器端部署</h3>
+            <p>利用TensorFlow.js技术，所有运算在本地浏览器中完成，保护隐私且无需互联网连接。</p>
+            <div class="card-overlay">
+              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="about" class="py-5 bg-light">
+    <div class="container">
+      <div class="row align-items-center">
+        <div class="col-lg-6" data-aos="fade-right" data-aos-duration="1000">
+          <div class="section-heading mb-4">
+            <span class="subtitle">我们的故事</span>
+            <h2>关于VisionSeek</h2>
+            <div class="heading-line"></div>
+          </div>
+          <p>VisionSeek是一个基于最新计算机视觉技术的智能检测平台，结合了YOLO11目标检测算法和先进的特征匹配技术，为用户提供高精度的视觉识别服务。</p>
+          <p>我们的目标是让复杂的计算机视觉技术变得简单易用，让每个人都能轻松地将视觉识别功能集成到自己的应用中。</p>
+          <div class="mt-4">
+            <a href="#contact" class="btn btn-outline-primary rounded-pill">联系我们</a>
+          </div>
+        </div>
+        <div class="col-lg-6" data-aos="fade-left" data-aos-duration="1000" data-aos-delay="200">
+          <div class="about-image-container">
+            <img src="templates/000001.jpg" alt="About VisionSeek" class="img-fluid rounded-3 shadow about-image">
+            <div class="experience-badge">
+              <span class="number">2+</span>
+              <span class="text">年研发经验</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="benefits" class="py-5">
+    <div class="container">
+      <div class="section-heading text-center mb-5" data-aos="fade-up">
+        <span class="subtitle">核心优势</span>
+        <h2>为什么选择VisionSeek</h2>
+        <div class="heading-line"></div>
+      </div>
+      <div class="row g-4">
+        <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="100">
+          <div class="benefit-card card-hover" data-bs-toggle="modal" data-bs-target="#accuracyModal">
+            <div class="benefit-icon">
+              <i class="bx bx-target-lock"></i>
+            </div>
+            <h3>高精度识别</h3>
+            <p>使用深度学习模型，识别精度高达95%以上</p>
+            <div class="card-overlay">
+              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="200">
+          <div class="benefit-card card-hover" data-bs-toggle="modal" data-bs-target="#realTimeModal">
+            <div class="benefit-icon">
+              <i class="bx bx-time"></i>
+            </div>
+            <h3>实时处理</h3>
+            <p>在普通设备上实现每秒15帧以上的处理速度</p>
+            <div class="card-overlay">
+              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="300">
+          <div class="benefit-card card-hover" data-bs-toggle="modal" data-bs-target="#privacyModal">
+            <div class="benefit-icon">
+              <i class="bx bx-lock-alt"></i>
+            </div>
+            <h3>隐私保护</h3>
+            <p>所有数据本地处理，无需上传云端</p>
+            <div class="card-overlay">
+              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="400">
+          <div class="benefit-card card-hover" data-bs-toggle="modal" data-bs-target="#customizationModal">
+            <div class="benefit-icon">
+              <i class="bx bx-slider"></i>
+            </div>
+            <h3>易于定制</h3>
+            <p>支持添加自定义模板进行特定物体识别</p>
+            <div class="card-overlay">
+              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="contact" class="py-5 bg-light">
+    <div class="container">
+      <div class="section-heading text-center mb-5" data-aos="fade-up">
+        <span class="subtitle">保持联系</span>
+        <h2>联系我们</h2>
+        <div class="heading-line"></div>
+      </div>
+      <div class="row justify-content-center" data-aos="fade-up" data-aos-delay="100">
+        <div class="col-lg-8">
+          <div class="contact-card">
+            <div class="row">
+              <div class="col-md-5">
+                <div class="contact-info">
+                  <h3>联系信息</h3>
+                  <p>有任何问题或建议，欢迎随时联系我们</p>
+                  <div class="contact-item">
+                    <i class="bx bx-envelope"></i>
+                    <span>example@visionseek.com</span>
+                  </div>
+                  <div class="contact-item">
+                    <i class="bx bx-phone"></i>
+                    <span>+86 123 4567 8910</span>
+                  </div>
+                  <div class="contact-item">
+                    <i class="bx bx-map"></i>
+                    <span>北京市海淀区中关村科技园</span>
+                  </div>
+                  <div class="social-links mt-4">
+                    <a href="#" class="social-link"><i class="bx bxl-github"></i></a>
+                    <a href="#" class="social-link"><i class="bx bxl-twitter"></i></a>
+                    <a href="#" class="social-link"><i class="bx bxl-linkedin"></i></a>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-7">
+                <form class="contact-form">
+                  <div class="mb-3">
+                    <label for="name" class="form-label">您的姓名</label>
+                    <input type="text" class="form-control" id="name" placeholder="请输入您的姓名">
+                  </div>
+                  <div class="mb-3">
+                    <label for="email" class="form-label">电子邮箱</label>
+                    <input type="email" class="form-control" id="email" placeholder="请输入您的邮箱">
+                  </div>
+                  <div class="mb-3">
+                    <label for="message" class="form-label">留言内容</label>
+                    <textarea class="form-control" id="message" rows="4" placeholder="请输入您的留言"></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-primary w-100">发送消息</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="py-4">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-6">
+          <h4><i class="bx bx-camera-movie"></i> VisionSeek</h4>
+          <p>智能视觉检测平台</p>
+        </div>
+        <div class="col-md-6 text-md-end">
+          <div class="social-links">
+            <a href="#"><i class="bx bxl-github"></i></a>
+            <a href="#"><i class="bx bxl-twitter"></i></a>
+            <a href="#"><i class="bx bxl-linkedin"></i></a>
+          </div>
+          <p class="mt-2">© 2023 VisionSeek. 保留所有权利。</p>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- 模态框 - 智能对象识别 -->
+  <div class="modal fade" id="objectDetectionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bx bx-search-alt"></i> 智能对象识别</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6">
+              <img src="templates/0003.png" class="img-fluid rounded mb-3" alt="对象识别示例">
+            </div>
+            <div class="col-md-6">
+              <h4>YOLO11 先进算法</h4>
+              <p>VisionSeek采用YOLO (You Only Look Once) 第11代算法，这是目前最先进的实时对象检测系统之一。该算法能同时预测多个边界框和类别概率，大幅提高了检测速度和精度。</p>
+              <h4>80+ 物体类别</h4>
+              <p>系统预训练模型支持识别80多种常见物体，包括：</p>
+              <ul>
+                <li>人、各类动物和交通工具</li>
+                <li>日常用品和电子设备</li>
+                <li>家具、食物及体育用品</li>
+              </ul>
+              <h4>实时性能</h4>
+              <p>优化后的浏览器端模型能够在普通设备上实现每秒15帧以上的处理速度，同时保持高检测精度。</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" id="startDetectionFromModal" data-bs-dismiss="modal">开始检测</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模态框 - 模板匹配 -->
+  <div class="modal fade" id="templateMatchingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bx bx-duplicate"></i> 模板匹配</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6">
+              <img src="templates/000001.jpg" class="img-fluid rounded mb-3" alt="模板匹配示例">
+            </div>
+            <div class="col-md-6">
+              <h4>深度特征匹配</h4>
+              <p>VisionSeek采用深度学习特征提取技术，通过MobileNet模型提取图像深层特征，实现比传统方法更强大的模板匹配能力。</p>
+              <h4>优势特点</h4>
+              <ul>
+                <li><strong>旋转不变性：</strong> 能识别各种角度的目标物体</li>
+                <li><strong>尺度适应：</strong> 适应目标物体的不同大小</li>
+                <li><strong>光照鲁棒：</strong> 对不同光照条件下的物体保持稳定识别</li>
+                <li><strong>部分遮挡：</strong> 在物体部分被遮挡的情况下仍能识别</li>
+              </ul>
+              <h4>应用场景</h4>
+              <p>特别适用于特定物体识别、产品质检、安防监控等需要精确识别特定目标的场景。</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" id="startDetectionFromModal2" data-bs-dismiss="modal">开始检测</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模态框 - 浏览器端部署 -->
+  <div class="modal fade" id="browserDeployModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bx bx-cloud"></i> 浏览器端部署</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6">
+              <h4>无服务器架构</h4>
+              <p>VisionSeek采用TensorFlow.js技术，将AI模型完全部署在浏览器端，所有计算都在用户设备本地完成。</p>
+              <h4>隐私保护</h4>
+              <p>所有视频数据和分析结果都在本地处理，不会上传到云端，从根本上保护用户隐私。</p>
+              <h4>技术优化</h4>
+              <ul>
+                <li><strong>WebGL加速：</strong> 利用GPU加速计算</li>
+                <li><strong>模型缓存：</strong> 使用IndexedDB缓存模型，提高加载速度</li>
+                <li><strong>内存管理：</strong> 优化内存使用，避免内存泄漏</li>
+                <li><strong>帧率控制：</strong> 智能调整帧率，平衡性能和设备发热</li>
+              </ul>
+            </div>
+            <div class="col-md-6">
+              <div class="tech-stack p-4 rounded bg-light">
+                <h4>技术栈</h4>
+                <div class="tech-item">
+                  <span>TensorFlow.js</span>
+                  <div class="progress">
+                    <div class="progress-bar" role="progressbar" style="width: 90%"></div>
+                  </div>
+                </div>
+                <div class="tech-item">
+                  <span>WebGL</span>
+                  <div class="progress">
+                    <div class="progress-bar" role="progressbar" style="width: 85%"></div>
+                  </div>
+                </div>
+                <div class="tech-item">
+                  <span>IndexedDB</span>
+                  <div class="progress">
+                    <div class="progress-bar" role="progressbar" style="width: 75%"></div>
+                  </div>
+                </div>
+                <div class="tech-item">
+                  <span>JavaScript ES6+</span>
+                  <div class="progress">
+                    <div class="progress-bar" role="progressbar" style="width: 95%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" id="startDetectionFromModal3" data-bs-dismiss="modal">开始检测</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 其他优势模态框 -->
+  <div class="modal fade" id="accuracyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bx bx-target-lock"></i> 高精度识别</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>VisionSeek采用最新的YOLO11算法和深度特征提取技术，在标准数据集上的识别精度达到95%以上。系统能够准确区分相似物体，并在复杂背景下保持高精度识别能力。</p>
+          <h5>精度提升技术：</h5>
+          <ul>
+            <li>多尺度特征融合</li>
+            <li>自适应阈值调整</li>
+            <li>上下文感知检测</li>
+            <li>边界框优化算法</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="realTimeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bx bx-time"></i> 实时处理</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>VisionSeek经过性能优化，能在普通设备上实现每秒15帧以上的处理速度，满足绝大多数实时应用场景需求。系统采用帧率控制策略，在不同硬件条件下智能调整以获得最佳体验。</p>
+          <h5>性能优化策略：</h5>
+          <ul>
+            <li>模型量化和压缩</li>
+            <li>GPU加速计算</li>
+            <li>智能内存管理</li>
+            <li>并行计算优化</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="privacyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bx bx-lock-alt"></i> 隐私保护</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>VisionSeek将所有计算过程完全在本地设备上进行，摄像头采集的视频数据和分析结果不会上传到任何服务器。这种设计从根本上保护了用户的隐私安全，特别适合处理敏感场景。</p>
+          <h5>隐私保护机制：</h5>
+          <ul>
+            <li>纯浏览器端运算</li>
+            <li>无数据上传功能</li>
+            <li>本地模型存储</li>
+            <li>会话结束数据自动清除</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="customizationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bx bx-slider"></i> 易于定制</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>VisionSeek提供简便的模板添加功能，用户只需提供目标物体的图像，系统就能自动提取特征并在实时视频中识别相同物体。这种设计使系统能够适应各种特定场景的需求。</p>
+          <h5>定制化功能：</h5>
+          <ul>
+            <li>自定义模板添加</li>
+            <li>检测参数调整</li>
+            <li>多模板管理</li>
+            <li>结果过滤和优化</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模板选择模态框 -->
+  <div class="modal fade" id="templateSelectionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bx bx-images"></i> 选择检测模板</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3" id="templateModalGallery">
+            <!-- 将通过JavaScript动态填充 -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 语音指令帮助模态框 -->
+  <div class="modal fade" id="voiceHelpModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bx bx-microphone"></i> 语音控制指令</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>您可以使用以下语音命令控制系统：</p>
+          <div class="list-group">
+            <div class="list-group-item">
+              <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1">开始检测</h6>
+              </div>
+              <p class="mb-1">进入检测界面，使用默认模板</p>
+            </div>
+            <div class="list-group-item">
+              <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1">寻找 [物品名称]</h6>
+              </div>
+              <p class="mb-1">使用指定物品模板开始检测</p>
+              <small class="text-muted">例如："寻找钥匙"、"寻找眼镜"</small>
+            </div>
+            <div class="list-group-item">
+              <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1">切换摄像头</h6>
+              </div>
+              <p class="mb-1">在前置和后置摄像头之间切换</p>
+            </div>
+            <div class="list-group-item">
+              <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1">拍照</h6>
+              </div>
+              <p class="mb-1">保存当前画面</p>
+            </div>
+            <div class="list-group-item">
+              <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1">朗读结果</h6>
+              </div>
+              <p class="mb-1">语音播报当前检测结果</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" data-bs-dismiss="modal">了解了</button>
+        </div>
       </div>
     </div>
   </div>
@@ -34,10 +752,35 @@
     <p>加载模型中...</p>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
   <script src="js/yoloDetector.js"></script>
   <script src="js/main.js"></script>
+  <script>
+    // 初始化AOS动画库
+    AOS.init();
+    
+    // 初始化工具提示
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+      return new bootstrap.Tooltip(tooltipTriggerEl)
+    });
+    
+    // 从模态框中的按钮开始检测
+    document.getElementById('startDetectionFromModal').addEventListener('click', function() {
+      document.getElementById('startDetection').click();
+    });
+    
+    document.getElementById('startDetectionFromModal2').addEventListener('click', function() {
+      document.getElementById('startDetection').click();
+    });
+    
+    document.getElementById('startDetectionFromModal3').addEventListener('click', function() {
+      document.getElementById('startDetection').click();
+    });
+  </script>
 </body>
 
 </html>
