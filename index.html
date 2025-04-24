@@ -10,27 +10,92 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/loader.css">
+  
+  <!-- 添加内联样式用于Toast消息 -->
+  <style>
+    .toast-message {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+      z-index: 9999;
+      opacity: 0;
+      transform: translateY(-20px);
+      transition: all 0.3s ease;
+    }
+    
+    .toast-message.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    .toast-content {
+      display: flex;
+      align-items: center;
+    }
+    
+    .toast-content i {
+      margin-right: 10px;
+      font-size: 1.2rem;
+    }
+    
+    .toast-success {
+      border-left: 4px solid #28a745;
+    }
+    
+    .toast-success i {
+      color: #28a745;
+    }
+    
+    .toast-danger {
+      border-left: 4px solid #dc3545;
+    }
+    
+    .toast-danger i {
+      color: #dc3545;
+    }
+    
+    .toast-warning {
+      border-left: 4px solid #ffc107;
+    }
+    
+    .toast-warning i {
+      color: #ffc107;
+    }
+    
+    .toast-info {
+      border-left: 4px solid #17a2b8;
+    }
+    
+    .toast-info i {
+      color: #17a2b8;
+    }
+  </style>
 </head>
 
 <body>
   <!-- 语音控制浮动按钮 -->
-  <div class="floating-button voice-control-btn" id="voiceControlBtn" title="语音控制">
+  <div class="floating-button voice-control-btn" id="voiceControlBtn" title="语音控制" data-bs-toggle="modal" data-bs-target="#voiceHelpModal">
     <i class="bx bx-microphone"></i>
   </div>
 
   <!-- 语音识别状态提示 -->
   <div class="voice-status" id="voiceStatus">
-    <div class="voice-indicator">
+    <div class="voice-indicator pulse">
       <div class="voice-waves"></div>
       <i class="bx bx-microphone"></i>
     </div>
-    <p id="voiceText">正在聆听...</p>
+    <p id="voiceText" class="shadow-sm">正在聆听...</p>
   </div>
 
   <nav class="navbar navbar-expand-lg navbar-dark fixed-top">
     <div class="container">
       <a class="navbar-brand" href="#">
         <i class="bx bx-camera-movie"></i> VisionSeek
+        <span class="badge bg-white text-primary ms-2 rounded-pill">Beta</span>
       </a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
         <span class="navbar-toggler-icon"></span>
@@ -38,19 +103,24 @@
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav ms-auto">
           <li class="nav-item">
-            <a class="nav-link active" href="#"><i class="bx bx-home-alt"></i> 首页</a>
+            <a class="nav-link active" href="#"><i class="bx bx-home-alt me-1"></i> 首页</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#features"><i class="bx bx-cube-alt"></i> 功能</a>
+            <a class="nav-link" href="#features"><i class="bx bx-cube-alt me-1"></i> 功能</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#upload-section"><i class="bx bx-upload"></i> 上传模板</a>
+            <a class="nav-link" href="#upload-section"><i class="bx bx-upload me-1"></i> 上传模板</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#about"><i class="bx bx-info-circle"></i> 关于</a>
+            <a class="nav-link" href="#about"><i class="bx bx-info-circle me-1"></i> 关于</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#contact"><i class="bx bx-envelope"></i> 联系我们</a>
+            <a class="nav-link" href="#contact"><i class="bx bx-envelope me-1"></i> 联系我们</a>
+          </li>
+          <li class="nav-item ms-lg-3">
+            <a class="btn btn-sm btn-light rounded-pill nav-btn" href="#" id="voiceHelpBtn">
+              <i class="bx bx-microphone me-1"></i> 语音帮助
+            </a>
           </li>
         </ul>
       </div>
@@ -62,18 +132,37 @@
       <div class="row align-items-center">
         <div class="col-lg-6" data-aos="fade-right" data-aos-duration="1000">
           <div class="hero-content">
+            <div class="badge bg-primary bg-opacity-10 text-primary mb-3 rounded-pill px-3 py-2">
+              <i class="bx bx-code-alt me-1"></i> 智能视觉 AI 平台
+            </div>
             <h1>智能视觉检测<br><span class="gradient-text">随时随地</span></h1>
             <p class="lead">VisionSeek利用先进的人工智能技术，提供高精度视觉识别和检测服务，让您轻松实现对象识别、特征匹配等复杂视觉任务。</p>
-            <div class="d-flex gap-3 flex-wrap">
-              <button id="startDetection" class="btn btn-primary btn-lg pulse-btn">
-                开始检测 <i class="bx bx-right-arrow-alt"></i>
+            <div class="d-flex gap-3 flex-wrap mt-4">
+              <button id="startDetection" class="btn btn-primary btn-lg pulse-btn rounded-pill">
+                开始检测 <i class="bx bx-right-arrow-alt ms-1"></i>
               </button>
-              <button id="startVoiceBtn" class="btn btn-outline-light btn-lg">
-                <i class="bx bx-microphone"></i> 语音控制
+              <button id="startVoiceBtn" class="btn btn-outline-light btn-lg rounded-pill">
+                <i class="bx bx-microphone me-1"></i> 语音控制
               </button>
             </div>
-            <div class="accessibility-note mt-3">
-              <i class="bx bx-info-circle"></i> 支持语音控制，方便视障人士使用
+            <div class="accessibility-note mt-3 d-flex align-items-center">
+              <i class="bx bx-info-circle me-2"></i> 
+              <span>支持语音控制，方便视障人士使用</span>
+            </div>
+            
+            <div class="hero-stats d-flex mt-4">
+              <div class="hero-stat-item me-4">
+                <div class="stat-value">95<span>%</span></div>
+                <div class="stat-label">识别精度</div>
+              </div>
+              <div class="hero-stat-item me-4">
+                <div class="stat-value">15<span>+</span></div>
+                <div class="stat-label">每秒帧数</div>
+              </div>
+              <div class="hero-stat-item">
+                <div class="stat-value">80<span>+</span></div>
+                <div class="stat-label">支持物体</div>
+              </div>
             </div>
           </div>
         </div>
@@ -82,6 +171,12 @@
             <img src="templates/0003.png" alt="VisionSeek Demo" class="img-fluid rounded-3 shadow-lg hero-image">
             <div class="floating-shape shape-1"></div>
             <div class="floating-shape shape-2"></div>
+            <div class="hero-badge position-absolute top-0 end-0 bg-primary text-white px-3 py-2 rounded-pill m-3">
+              <i class="bx bx-camera me-1"></i> 实时检测
+            </div>
+            <div class="hero-badge position-absolute bottom-0 start-0 bg-success text-white px-3 py-2 rounded-pill m-3">
+              <i class="bx bx-lock me-1"></i> 隐私保护
+            </div>
           </div>
         </div>
       </div>
@@ -194,8 +289,8 @@
                     <textarea class="form-control" id="templateDescription" rows="2" placeholder="描述物品的特征，形状、颜色等"></textarea>
                   </div>
                   <div class="mb-3">
-                    <label for="templateFile" class="form-label">上传图片 <span class="text-danger">*</span></label>
-                    <input type="file" class="form-control" id="templateFile" accept="image/*" required>
+                    <label for="templateImageUpload" class="form-label">上传图片 <span class="text-danger">*</span></label>
+                    <input type="file" class="form-control" id="templateImageUpload" accept="image/*" required>
                     <div class="form-text">支持JPG、PNG格式，最佳分辨率为640×480像素</div>
                   </div>
                   <div class="d-grid">
@@ -209,18 +304,96 @@
           </div>
 
           <div class="mt-5" data-aos="fade-up">
-            <h4 class="mb-3">我的模板库</h4>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+              <h4 class="mb-0"><i class="bx bx-images me-2"></i>我的模板库</h4>
+              <button id="openTemplateModal" class="btn btn-sm btn-outline-primary rounded-pill">
+                <i class="bx bx-folder-open me-1"></i> 浏览所有模板
+              </button>
+            </div>
             <div class="template-gallery" id="templateGallery">
               <div class="row g-3" id="userTemplates">
                 <!-- 模板卡片将通过JavaScript动态添加 -->
                 <div class="col-6 col-md-4 col-lg-3">
-                  <div class="template-card template-placeholder">
+                  <div class="template-card template-placeholder shadow-sm rounded-3 hover-lift">
                     <div class="template-thumbnail d-flex align-items-center justify-content-center">
                       <i class="bx bx-image"></i>
                     </div>
                     <div class="template-info p-2">
                       <h6 class="template-name">无自定义模板</h6>
                       <p class="template-date small text-muted">请上传您的第一个模板</p>
+                    </div>
+                    <div class="card-overlay">
+                      <div class="d-flex justify-content-center align-items-center h-100">
+                        <i class="bx bx-plus-circle"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 预设模板样例 -->
+                <div class="col-6 col-md-4 col-lg-3" data-aos="fade-up" data-aos-delay="100">
+                  <div class="template-card shadow-sm rounded-3 hover-lift">
+                    <div class="template-thumbnail">
+                      <img src="templates/000001.jpg" alt="水杯" class="img-fluid">
+                      <span class="badge bg-success position-absolute top-0 end-0 m-2">常用</span>
+                    </div>
+                    <div class="template-info p-2">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="template-name mb-0">水杯</h6>
+                        <span class="badge bg-primary">日用品</span>
+                      </div>
+                      <p class="template-date small text-muted mt-1">日常使用的水杯</p>
+                      <div class="template-actions mt-2">
+                        <button class="btn btn-sm btn-primary w-100 rounded-pill use-template">
+                          <i class="bx bx-camera me-1"></i> 开始检测
+                        </button>
+                      </div>
+                    </div>
+                    <div class="card-overlay">
+                      <div class="d-flex justify-content-center align-items-center h-100">
+                        <button class="btn btn-sm btn-light rounded-circle me-2 template-view" title="查看详情">
+                          <i class="bx bx-search"></i>
+                        </button>
+                        <button class="btn btn-sm btn-primary rounded-circle me-2 use-template" title="使用模板">
+                          <i class="bx bx-camera"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger rounded-circle template-delete" title="删除模板">
+                          <i class="bx bx-trash"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="col-6 col-md-4 col-lg-3" data-aos="fade-up" data-aos-delay="200">
+                  <div class="template-card shadow-sm rounded-3 hover-lift">
+                    <div class="template-thumbnail">
+                      <img src="templates/000002.jpg" alt="手机" class="img-fluid">
+                    </div>
+                    <div class="template-info p-2">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="template-name mb-0">手机</h6>
+                        <span class="badge bg-info">电子设备</span>
+                      </div>
+                      <p class="template-date small text-muted mt-1">智能手机</p>
+                      <div class="template-actions mt-2">
+                        <button class="btn btn-sm btn-primary w-100 rounded-pill use-template">
+                          <i class="bx bx-camera me-1"></i> 开始检测
+                        </button>
+                      </div>
+                    </div>
+                    <div class="card-overlay">
+                      <div class="d-flex justify-content-center align-items-center h-100">
+                        <button class="btn btn-sm btn-light rounded-circle me-2 template-view" title="查看详情">
+                          <i class="bx bx-search"></i>
+                        </button>
+                        <button class="btn btn-sm btn-primary rounded-circle me-2 use-template" title="使用模板">
+                          <i class="bx bx-camera"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger rounded-circle template-delete" title="删除模板">
+                          <i class="bx bx-trash"></i>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -241,38 +414,53 @@
       </div>
       <div class="row g-4">
         <div class="col-md-4" data-aos="fade-up" data-aos-delay="100">
-          <div class="feature-card card-hover" data-bs-toggle="modal" data-bs-target="#objectDetectionModal">
-            <div class="icon-wrapper">
-              <i class="bx bx-search-alt"></i>
+          <div class="feature-card card-hover shadow-sm" data-bs-toggle="modal" data-bs-target="#objectDetectionModal">
+            <div class="card-body">
+              <div class="icon-wrapper">
+                <i class="bx bx-search-alt"></i>
+              </div>
+              <h3>智能对象识别</h3>
+              <p>基于YOLO11算法，精准识别80多种常见对象，实时分析场景中的物体。</p>
+              <div class="card-overlay">
+                <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+              </div>
             </div>
-            <h3>智能对象识别</h3>
-            <p>基于YOLO11算法，精准识别80多种常见对象，实时分析场景中的物体。</p>
-            <div class="card-overlay">
-              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            <div class="card-footer text-center">
+              <button class="btn btn-sm btn-outline-primary rounded-pill">详细信息</button>
             </div>
           </div>
         </div>
         <div class="col-md-4" data-aos="fade-up" data-aos-delay="200">
-          <div class="feature-card card-hover" data-bs-toggle="modal" data-bs-target="#templateMatchingModal">
-            <div class="icon-wrapper">
-              <i class="bx bx-duplicate"></i>
+          <div class="feature-card card-hover shadow-sm" data-bs-toggle="modal" data-bs-target="#templateMatchingModal">
+            <div class="card-body">
+              <div class="icon-wrapper">
+                <i class="bx bx-duplicate"></i>
+              </div>
+              <h3>模板匹配</h3>
+              <p>提供高级特征匹配功能，可检测指定物体，即使在不同角度和光照条件下也能精确识别。</p>
+              <div class="card-overlay">
+                <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+              </div>
             </div>
-            <h3>模板匹配</h3>
-            <p>提供高级特征匹配功能，可检测指定物体，即使在不同角度和光照条件下也能精确识别。</p>
-            <div class="card-overlay">
-              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            <div class="card-footer text-center">
+              <button class="btn btn-sm btn-outline-primary rounded-pill">详细信息</button>
             </div>
           </div>
         </div>
         <div class="col-md-4" data-aos="fade-up" data-aos-delay="300">
-          <div class="feature-card card-hover" data-bs-toggle="modal" data-bs-target="#browserDeployModal">
-            <div class="icon-wrapper">
-              <i class="bx bx-cloud"></i>
+          <div class="feature-card card-hover shadow-sm" data-bs-toggle="modal" data-bs-target="#browserDeployModal">
+            <div class="card-body">
+              <div class="icon-wrapper">
+                <i class="bx bx-cloud"></i>
+              </div>
+              <h3>浏览器端部署</h3>
+              <p>利用TensorFlow.js技术，所有运算在本地浏览器中完成，保护隐私且无需互联网连接。</p>
+              <div class="card-overlay">
+                <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+              </div>
             </div>
-            <h3>浏览器端部署</h3>
-            <p>利用TensorFlow.js技术，所有运算在本地浏览器中完成，保护隐私且无需互联网连接。</p>
-            <div class="card-overlay">
-              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            <div class="card-footer text-center">
+              <button class="btn btn-sm btn-outline-primary rounded-pill">详细信息</button>
             </div>
           </div>
         </div>
@@ -317,50 +505,70 @@
       </div>
       <div class="row g-4">
         <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="100">
-          <div class="benefit-card card-hover" data-bs-toggle="modal" data-bs-target="#accuracyModal">
-            <div class="benefit-icon">
-              <i class="bx bx-target-lock"></i>
+          <div class="benefit-card card-hover shadow-sm" data-bs-toggle="modal" data-bs-target="#accuracyModal">
+            <div class="card-body">
+              <div class="benefit-icon">
+                <i class="bx bx-target-lock"></i>
+              </div>
+              <h3>高精度识别</h3>
+              <p>使用深度学习模型，识别精度高达95%以上</p>
+              <div class="card-overlay">
+                <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+              </div>
             </div>
-            <h3>高精度识别</h3>
-            <p>使用深度学习模型，识别精度高达95%以上</p>
-            <div class="card-overlay">
-              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            <div class="card-footer bg-light text-center">
+              <span class="badge bg-primary rounded-pill">95%+ 精度</span>
             </div>
           </div>
         </div>
         <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="200">
-          <div class="benefit-card card-hover" data-bs-toggle="modal" data-bs-target="#realTimeModal">
-            <div class="benefit-icon">
-              <i class="bx bx-time"></i>
+          <div class="benefit-card card-hover shadow-sm" data-bs-toggle="modal" data-bs-target="#realTimeModal">
+            <div class="card-body">
+              <div class="benefit-icon">
+                <i class="bx bx-time"></i>
+              </div>
+              <h3>实时处理</h3>
+              <p>在普通设备上实现每秒15帧以上的处理速度</p>
+              <div class="card-overlay">
+                <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+              </div>
             </div>
-            <h3>实时处理</h3>
-            <p>在普通设备上实现每秒15帧以上的处理速度</p>
-            <div class="card-overlay">
-              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            <div class="card-footer bg-light text-center">
+              <span class="badge bg-primary rounded-pill">15+ FPS</span>
             </div>
           </div>
         </div>
         <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="300">
-          <div class="benefit-card card-hover" data-bs-toggle="modal" data-bs-target="#privacyModal">
-            <div class="benefit-icon">
-              <i class="bx bx-lock-alt"></i>
+          <div class="benefit-card card-hover shadow-sm" data-bs-toggle="modal" data-bs-target="#privacyModal">
+            <div class="card-body">
+              <div class="benefit-icon">
+                <i class="bx bx-lock-alt"></i>
+              </div>
+              <h3>隐私保护</h3>
+              <p>所有数据本地处理，无需上传云端</p>
+              <div class="card-overlay">
+                <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+              </div>
             </div>
-            <h3>隐私保护</h3>
-            <p>所有数据本地处理，无需上传云端</p>
-            <div class="card-overlay">
-              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            <div class="card-footer bg-light text-center">
+              <span class="badge bg-success rounded-pill">本地计算</span>
             </div>
           </div>
         </div>
         <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="400">
-          <div class="benefit-card card-hover" data-bs-toggle="modal" data-bs-target="#customizationModal">
-            <div class="benefit-icon">
-              <i class="bx bx-slider"></i>
+          <div class="benefit-card card-hover shadow-sm" data-bs-toggle="modal" data-bs-target="#customizationModal">
+            <div class="card-body">
+              <div class="benefit-icon">
+                <i class="bx bx-slider"></i>
+              </div>
+              <h3>易于定制</h3>
+              <p>支持添加自定义模板进行特定物体识别</p>
+              <div class="card-overlay">
+                <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+              </div>
             </div>
-            <h3>易于定制</h3>
-            <p>支持添加自定义模板进行特定物体识别</p>
-            <div class="card-overlay">
-              <span>了解更多 <i class="bx bx-chevron-right"></i></span>
+            <div class="card-footer bg-light text-center">
+              <span class="badge bg-info rounded-pill">自定义模板</span>
             </div>
           </div>
         </div>
@@ -747,6 +955,61 @@
     </div>
   </div>
 
+  <!-- 模板详情模态框 -->
+  <div class="modal fade" id="templateDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bx bx-detail"></i> <span id="detailTemplateName">模板详情</span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6">
+              <img id="detailTemplateImg" src="" alt="模板图片" class="img-fluid rounded mb-3">
+            </div>
+            <div class="col-md-6">
+              <div class="template-detail-info">
+                <div class="detail-item mb-3">
+                  <h6><i class="bx bx-category"></i> 类别</h6>
+                  <p id="detailTemplateCategory" class="mb-0"></p>
+                </div>
+                <div class="detail-item mb-3">
+                  <h6><i class="bx bx-calendar"></i> 添加日期</h6>
+                  <p id="detailTemplateDate" class="mb-0"></p>
+                </div>
+                <div class="detail-item">
+                  <h6><i class="bx bx-text"></i> 描述</h6>
+                  <p id="detailTemplateDesc" class="mb-0"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-3">
+            <div class="alert alert-info">
+              <i class="bx bx-info-circle me-2"></i> 
+              <span>点击"开始检测"按钮使用此模板进行对象识别</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+          <button type="button" class="btn btn-danger" id="detailDeleteBtn">
+            <i class="bx bx-trash me-1"></i> 删除
+          </button>
+          <button type="button" class="btn btn-primary" id="detailUseBtn">
+            <i class="bx bx-camera me-1"></i> 开始检测
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 回到顶部按钮 -->
+  <div id="scrollToTop" title="回到顶部">
+    <i class="bx bx-chevron-up"></i>
+  </div>
+
   <div id="loader" class="wrapper" style="display: none">
     <div class="spinner"></div>
     <p>加载模型中...</p>
@@ -754,18 +1017,295 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+  <!-- 添加onload和onerror处理以确保TensorFlow.js正确加载 -->
+  <script 
+    src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs" 
+    onload="console.log('TensorFlow.js加载成功')" 
+    onerror="console.error('TensorFlow.js加载失败'); alert('AI检测核心组件加载失败，请检查网络连接并刷新页面');">
+  </script>
+  <script 
+    src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet" 
+    onload="console.log('MobileNet模型加载成功')" 
+    onerror="console.error('MobileNet模型加载失败'); alert('AI模型加载失败，请检查网络连接并刷新页面');">
+  </script>
   <script src="js/yoloDetector.js"></script>
   <script src="js/main.js"></script>
+  
+  <!-- 核心检测实现，直接内联在HTML中 -->
   <script>
+    // 全局变量
+    let currentFacingMode = 'environment'; // 默认使用后置摄像头
+    let isDetecting = false;
+    let currentTemplate = {
+      path: 'templates/000001.jpg',
+      name: '默认模板',
+      category: 'default',
+      date: new Date().toISOString()
+    };
+
+    // 直接在HTML中实现initDetection函数，不依赖外部JS
+    function initDetection() {
+      console.log('使用HTML内联的initDetection函数');
+      
+      // 显示加载状态
+      const loader = document.getElementById('loader');
+      if (loader) loader.style.display = 'flex';
+      
+      // 显示检测界面
+      const detectionInterface = document.getElementById('detection-interface');
+      if (detectionInterface) {
+        detectionInterface.style.display = 'block';
+        window.scrollTo({
+          top: detectionInterface.offsetTop - 80,
+          behavior: 'smooth'
+        });
+      } else {
+        console.error('未找到检测界面元素');
+        if (loader) loader.style.display = 'none';
+        alert('检测界面加载失败，请刷新页面重试');
+        return;
+      }
+      
+      // 设置Canvas尺寸
+      const cameraCanvas = document.getElementById('cameraCanvas');
+      if (cameraCanvas && cameraCanvas.parentElement) {
+        const containerWidth = cameraCanvas.parentElement.clientWidth;
+        const containerHeight = cameraCanvas.parentElement.clientHeight || 480;
+        cameraCanvas.width = containerWidth;
+        cameraCanvas.height = containerHeight;
+      }
+
+      // 尝试访问摄像头
+      if (!isDetecting) {
+        setupCamera()
+          .then(function() {
+            console.log('摄像头设置成功');
+            isDetecting = true;
+            detectFrame();
+            showToast('摄像头启动成功');
+            if (loader) loader.style.display = 'none';
+          })
+          .catch(function(error) {
+            console.error('摄像头访问失败:', error);
+            if (loader) loader.style.display = 'none';
+            
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert alert-danger';
+            errorDiv.innerHTML = `<i class="bx bx-error-circle me-2"></i> ${error.message}`;
+            
+            if (detectionInterface && detectionInterface.querySelector('.container')) {
+              detectionInterface.querySelector('.container').prepend(errorDiv);
+            }
+            
+            showToast(error.message, 'danger');
+            isDetecting = false;
+          });
+      } else {
+        console.log('已经在检测中，不需要重新初始化');
+        showToast('继续检测中');
+        if (loader) loader.style.display = 'none';
+      }
+    }
+
+    // 设置摄像头函数
+    async function setupCamera() {
+      const video = document.getElementById('videoElement');
+      if (!video) {
+        throw new Error('未找到视频元素');
+      }
+      
+      // 停止之前的媒体流
+      if (video.srcObject) {
+        const tracks = video.srcObject.getTracks();
+        tracks.forEach(track => track.stop());
+      }
+      
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: currentFacingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+        
+        video.srcObject = stream;
+        
+        return new Promise((resolve) => {
+          video.onloadedmetadata = () => {
+            video.play().then(() => {
+              resolve(video);
+            }).catch(error => {
+              console.error('视频播放失败:', error);
+              throw new Error('无法播放摄像头视频');
+            });
+          };
+        });
+      } catch (error) {
+        console.error('摄像头访问失败:', error);
+        if (error.name === 'NotAllowedError') {
+          throw new Error('摄像头访问被拒绝，请授予权限');
+        } else if (error.name === 'NotFoundError') {
+          throw new Error('未找到可用摄像头设备');
+        } else {
+          throw new Error('摄像头启动失败: ' + error.message);
+        }
+      }
+    }
+
+    // 基础的检测帧处理
+    function detectFrame() {
+      if (!isDetecting) return;
+      
+      const video = document.getElementById('videoElement');
+      const cameraCanvas = document.getElementById('cameraCanvas');
+      const ctx = cameraCanvas ? cameraCanvas.getContext('2d') : null;
+      
+      if (!video || !cameraCanvas || !ctx) {
+        console.error('检测所需元素未找到');
+        isDetecting = false;
+        return;
+      }
+      
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        // 绘制视频帧到canvas
+        ctx.drawImage(video, 0, 0, cameraCanvas.width, cameraCanvas.height);
+        
+        // 如果有TensorFlow.js和模型加载成功，尝试进行检测
+        if (window.tf && window.mobilenet) {
+          try {
+            // 这里可以添加实际的检测逻辑
+            // 现在先只显示提示信息
+            const resultsList = document.getElementById('resultsList');
+            if (resultsList && !resultsList.hasChildNodes()) {
+              resultsList.innerHTML = '<div class="alert alert-info">摄像头已成功启动，检测功能正在初始化...</div>';
+            }
+          } catch (error) {
+            console.error('检测过程中发生错误:', error);
+          }
+        }
+      }
+      
+      // 循环调用以形成动画
+      requestAnimationFrame(detectFrame);
+    }
+
+    // 摄像头切换函数
+    async function switchCamera() {
+      currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+      console.log(`切换至${currentFacingMode === 'environment' ? '后置' : '前置'}摄像头`);
+      
+      try {
+        // 如果已经在检测中，重新设置摄像头
+        if (isDetecting) {
+          await setupCamera();
+          showToast(`已切换至${currentFacingMode === 'environment' ? '后置' : '前置'}摄像头`);
+        }
+      } catch (error) {
+        console.error('切换摄像头失败:', error);
+        showToast('切换摄像头失败: ' + error.message, 'danger');
+      }
+    }
+
+    // 截图功能
+    function captureFrame() {
+      const canvas = document.getElementById('cameraCanvas');
+      if (!canvas) return;
+      
+      // 创建一个临时链接并触发下载
+      const link = document.createElement('a');
+      link.download = `visionseek-capture-${new Date().toISOString()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      
+      showToast('已保存检测画面');
+    }
+
+    // 显示消息提示
+    function showToast(message, type = 'success') {
+      // 如果已有toast则先移除
+      let existingToast = document.querySelector('.toast-message');
+      if (existingToast) {
+        existingToast.remove();
+      }
+      
+      // 创建toast元素
+      const toast = document.createElement('div');
+      toast.className = `toast-message toast-${type}`;
+      toast.innerHTML = `
+        <div class="toast-content">
+          <i class="bx bx-${type === 'success' ? 'check' : 'x'}-circle"></i>
+          <span>${message}</span>
+        </div>
+      `;
+      
+      // 添加到页面
+      document.body.appendChild(toast);
+      
+      // 显示toast
+      setTimeout(() => toast.classList.add('show'), 10);
+      
+      // 3秒后自动移除
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+    
+    // 朗读检测结果
+    function readDetectionResults() {
+      const resultsList = document.getElementById('resultsList');
+      if (!resultsList) return;
+      
+      let resultsText = '';
+      
+      if (!resultsList.hasChildNodes()) {
+        resultsText = '当前未检测到物体';
+      } else {
+        resultsText = '检测结果正在处理中';
+      }
+      
+      // 如果浏览器支持语音合成
+      if (window.speechSynthesis) {
+        const utterance = new SpeechSynthesisUtterance(resultsText);
+        utterance.lang = 'zh-CN';
+        speechSynthesis.speak(utterance);
+      } else {
+        // 不支持语音合成则使用提示
+        alert(resultsText);
+      }
+    }
+    
     // 初始化AOS动画库
-    AOS.init();
+    AOS.init({
+      duration: 800,
+      easing: 'ease-in-out',
+      once: true,
+      mirror: false
+    });
     
     // 初始化工具提示
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-      return new bootstrap.Tooltip(tooltipTriggerEl)
+      return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // 回到顶部按钮
+    const scrollToTopBtn = document.getElementById('scrollToTop');
+    window.addEventListener('scroll', function() {
+      if (window.scrollY > 300) {
+        scrollToTopBtn.classList.add('active');
+      } else {
+        scrollToTopBtn.classList.remove('active');
+      }
+    });
+    
+    scrollToTopBtn.addEventListener('click', function() {
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
     });
     
     // 从模态框中的按钮开始检测
@@ -779,6 +1319,154 @@
     
     document.getElementById('startDetectionFromModal3').addEventListener('click', function() {
       document.getElementById('startDetection').click();
+    });
+
+    // 添加上传预览功能
+    document.getElementById('templateImageUpload').addEventListener('change', function() {
+      const file = this.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          document.getElementById('previewContainer').innerHTML = `
+            <div class="preview-image">
+              <img src="${e.target.result}" alt="预览" class="img-fluid rounded">
+              <button type="button" class="btn-close remove-preview" aria-label="移除"></button>
+            </div>
+          `;
+          
+          document.querySelector('.remove-preview').addEventListener('click', function() {
+            document.getElementById('previewContainer').innerHTML = `
+              <i class="bx bx-image-add"></i>
+              <p>预览区域</p>
+            `;
+            document.getElementById('templateImageUpload').value = '';
+          });
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+    
+    // 确保语音控制按钮正常工作
+    document.getElementById('startVoiceBtn').addEventListener('click', function() {
+      if (typeof startListening === 'function') {
+        startListening();
+      } else {
+        console.error('语音识别功能未加载');
+        alert('语音识别功能未能正确加载，请检查您的浏览器是否支持语音识别API。');
+      }
+    });
+    
+    // 样例模板查看详情
+    document.querySelectorAll('.template-view').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const templateCard = this.closest('.template-card');
+        const templateImg = templateCard.querySelector('img').src;
+        const templateName = templateCard.querySelector('.template-name').textContent;
+        const templateCategory = templateCard.querySelector('.badge').textContent;
+        const templateDesc = templateCard.querySelector('.template-date').textContent;
+        
+        // 填充模态框内容
+        document.getElementById('detailTemplateImg').src = templateImg;
+        document.getElementById('detailTemplateName').textContent = templateName;
+        document.getElementById('detailTemplateCategory').textContent = templateCategory;
+        document.getElementById('detailTemplateDate').textContent = new Date().toLocaleDateString();
+        document.getElementById('detailTemplateDesc').textContent = templateDesc;
+        
+        // 显示模态框
+        const modal = new bootstrap.Modal(document.getElementById('templateDetailModal'));
+        modal.show();
+      });
+    });
+    
+    // 样例模板使用功能
+    document.querySelectorAll('.use-template').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const templateCard = this.closest('.template-card');
+        const templateName = templateCard.querySelector('.template-name').textContent;
+        
+        // 显示toast通知
+        alert(`已选择模板: ${templateName}`);
+        
+        // 滚动到检测界面
+        document.getElementById('startDetection').click();
+      });
+    });
+    
+    // 为动态生成的模板卡片添加事件(实际应用中会由main.js处理)
+    function addTemplateCardEvents() {
+      // 这里是示例代码，实际会由main.js中的代码处理
+      console.log('Template card events initialized');
+    }
+    
+    // 页面加载完成后初始化
+    window.addEventListener('load', function() {
+      // 初始化模板卡片事件
+      addTemplateCardEvents();
+      
+      // 添加页面滚动动画
+      window.addEventListener('scroll', function() {
+        if (window.scrollY > 50) {
+          document.querySelector('.navbar').classList.add('navbar-scrolled');
+        } else {
+          document.querySelector('.navbar').classList.remove('navbar-scrolled');
+        }
+      });
+      
+      // 添加开始检测按钮事件监听
+      const startDetectionBtn = document.getElementById('startDetection');
+      if (startDetectionBtn) {
+        startDetectionBtn.addEventListener('click', function() {
+          console.log('开始检测按钮被点击');
+          // 调用检测初始化函数
+          try {
+            initDetection();
+          } catch (error) {
+            console.error('执行initDetection函数时出错:', error);
+            alert('检测功能执行失败: ' + error.message);
+          }
+        });
+      }
+      
+      // 添加切换摄像头按钮事件监听
+      const switchCameraBtn = document.getElementById('switchCamera');
+      if (switchCameraBtn) {
+        switchCameraBtn.addEventListener('click', function() {
+          try {
+            switchCamera();
+          } catch (error) {
+            console.error('切换摄像头失败:', error);
+            alert('切换摄像头失败: ' + error.message);
+          }
+        });
+      }
+      
+      // 添加截图按钮事件监听
+      const captureBtn = document.getElementById('captureBtn');
+      if (captureBtn) {
+        captureBtn.addEventListener('click', function() {
+          try {
+            captureFrame();
+          } catch (error) {
+            console.error('截图失败:', error);
+            alert('截图功能执行失败: ' + error.message);
+          }
+        });
+      }
+      
+      // 添加朗读结果按钮事件监听
+      const speakResultBtn = document.getElementById('speakResultBtn');
+      if (speakResultBtn) {
+        speakResultBtn.addEventListener('click', function() {
+          try {
+            readDetectionResults();
+          } catch (error) {
+            console.error('朗读结果失败:', error);
+            alert('语音朗读功能执行失败: ' + error.message);
+          }
+        });
+      }
     });
   </script>
 </body>

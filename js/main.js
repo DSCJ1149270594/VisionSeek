@@ -10,6 +10,12 @@ let currentTemplate = {
     date: new Date().toISOString()
 };
 
+// 全局变量
+let currentFacingMode = 'environment'; // 默认使用后置摄像头
+let detector = null;
+let isModelLoaded = false;
+let isDetecting = false;
+
 // 检查浏览器是否支持getUserMedia
 async function setupCamera() {
     // 检查是否在安全上下文中运行
@@ -398,856 +404,886 @@ function readDetectionResults() {
     speakText(resultsText);
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+// 设置Canvas尺寸
+function setupCanvasSize() {
+    const cameraCanvas = document.getElementById('cameraCanvas');
+    if (!cameraCanvas || !cameraCanvas.parentElement) return;
+    
+    const containerWidth = cameraCanvas.parentElement.clientWidth;
+    const containerHeight = cameraCanvas.parentElement.clientHeight || 480; // 默认高度
+    cameraCanvas.width = containerWidth;
+    cameraCanvas.height = containerHeight;
+}
+
+// 响应窗口大小变化
+window.addEventListener('resize', setupCanvasSize);
+
+// 初始化摄像头并开始检测 - 这是核心功能函数
+async function initDetection() {
+    console.log('initDetection被调用，开始初始化检测');
+    
     const video = document.getElementById('videoElement');
     const cameraCanvas = document.getElementById('cameraCanvas');
-    const ctx = cameraCanvas.getContext('2d');
+    const ctx = cameraCanvas ? cameraCanvas.getContext('2d') : null;
     const loader = document.getElementById('loader');
-    const resultsList = document.getElementById('resultsList');
-    const detectionCount = document.getElementById('detectionCount');
     const detectionInterface = document.getElementById('detection-interface');
-    const startDetectionBtn = document.getElementById('startDetection');
-    const captureBtn = document.getElementById('captureBtn');
-    const switchCameraBtn = document.getElementById('switchCamera');
-    const voiceControlBtn = document.getElementById('voiceControlBtn');
-    const startVoiceBtn = document.getElementById('startVoiceBtn');
-    const speakResultBtn = document.getElementById('speakResultBtn');
     
-    // 初始化语音识别
-    initSpeechRecognition();
-    
-    // 更新当前模板显示
-    updateCurrentTemplateDisplay();
-    
-    // 语音控制按钮事件
-    if (voiceControlBtn) {
-        voiceControlBtn.addEventListener('click', () => {
-            if (recognitionActive) {
-                stopListening();
-            } else {
-                startListening();
-            }
-        });
+    if (!video || !cameraCanvas || !ctx) {
+        console.error('视频或画布元素未找到');
+        showToast('视频或画布元素未找到，请刷新页面重试', 'danger');
+        return;
     }
     
-    // 开始语音按钮事件
-    if (startVoiceBtn) {
-        startVoiceBtn.addEventListener('click', () => {
-            startListening();
-        });
-    }
-    
-    // 朗读结果按钮事件
-    if (speakResultBtn) {
-        speakResultBtn.addEventListener('click', readDetectionResults);
-    }
-    
-    // 滚动导航栏变化效果
-    window.addEventListener('scroll', function() {
-        const navbar = document.querySelector('.navbar');
-        if (window.scrollY > 100) {
-            navbar.style.padding = '0.5rem 0';
-            navbar.style.backgroundColor = 'rgba(67, 97, 238, 0.95)';
-        } else {
-            navbar.style.padding = '1rem 0';
-            navbar.style.backgroundColor = 'var(--primary)';
-        }
-    });
-    
-    let currentFacingMode = 'environment'; // 默认使用后置摄像头
-    let detector = null;
-    let isModelLoaded = false;
-    let isDetecting = false;
-
-    // 设置Canvas尺寸
-    function setupCanvasSize() {
-        const containerWidth = cameraCanvas.parentElement.clientWidth;
-        const containerHeight = cameraCanvas.parentElement.clientHeight;
-        cameraCanvas.width = containerWidth;
-        cameraCanvas.height = containerHeight;
-    }
-    
-    // 响应窗口大小变化
-    window.addEventListener('resize', setupCanvasSize);
-    
-    // 初始化摄像头并开始检测
-    async function initDetection() {
+    // 显示检测界面
+    if (detectionInterface) {
         detectionInterface.style.display = 'block';
         window.scrollTo({
             top: detectionInterface.offsetTop - 80,
             behavior: 'smooth'
         });
+    } else {
+        console.error('未找到检测界面元素');
+        showToast('检测界面加载失败，请刷新页面重试', 'danger');
+        return;
+    }
+    
+    // 设置Canvas尺寸
+    setupCanvasSize();
+    
+    if (!isModelLoaded) {
+        if (loader) loader.style.display = 'flex';
+        if (loader && loader.querySelector('p')) loader.querySelector('p').textContent = '正在加载模型...';
+        speakText('正在加载检测模型，请稍候');
         
-        setupCanvasSize();
-        
-        if (!isModelLoaded) {
-            loader.style.display = 'flex';
-            loader.querySelector('p').textContent = '正在加载模型...';
-            speakText('正在加载检测模型，请稍候');
+        try {
+            // 初始化检测器
+            console.log('开始初始化检测器');
+            if (typeof YoloDetector === 'undefined') {
+                throw new Error('检测器模块未加载，请确认yoloDetector.js已正确引入');
+            }
             
-            try {
-                // 初始化检测器
-                detector = new YoloDetector();
-                
-                await new Promise(resolve => {
-                    const checkInit = () => {
-                        if (detector.initialized) {
-                            resolve();
-                        } else {
-                            setTimeout(checkInit, 100);
-                        }
-                    };
-                    checkInit();
-                });
-                
-                // 加载模板图像
-                const templatePath = currentTemplate.path;
-                const template = new Image();
-                template.src = templatePath;
-                await new Promise(resolve => {
-                    template.onload = async () => {
+            detector = new YoloDetector();
+            console.log('检测器实例已创建');
+            
+            // 等待检测器初始化完成
+            await new Promise((resolve, reject) => {
+                console.log('等待检测器初始化');
+                const checkInit = () => {
+                    if (detector && detector.initialized) {
+                        console.log('检测器初始化成功');
+                        resolve();
+                    } else if (detector) {
+                        console.log('检测器初始化中...');
+                        setTimeout(checkInit, 500);
+                    } else {
+                        reject(new Error('检测器实例无效'));
+                    }
+                };
+                checkInit();
+            });
+            
+            // 加载模板图像
+            if (!currentTemplate || !currentTemplate.path) {
+                throw new Error('未选择模板或模板路径无效');
+            }
+            
+            console.log('加载模板图像:', currentTemplate.path);
+            const templatePath = currentTemplate.path;
+            const template = new Image();
+            template.crossOrigin = "Anonymous"; // 添加跨域支持
+            template.src = templatePath;
+            
+            await new Promise((resolve, reject) => {
+                template.onload = async () => {
+                    console.log('模板图像加载成功，获取特征');
+                    try {
                         const isGotten = await detector.getTemplate(template);
                         if (isGotten === 0) {
                             console.log('模板特征获取成功');
+                            resolve();
                         } else {
                             console.error('模板特征获取失败');
+                            reject(new Error('模板特征获取失败'));
                         }
-                        resolve();
-                    };
-                });
-                
-                isModelLoaded = true;
-                showToast('模型加载成功');
-                speakText('模型加载完成');
-            } catch (error) {
-                console.error('模型加载失败', error);
-                showToast('模型加载失败，请刷新重试', 'danger');
-                speakText('模型加载失败，请刷新页面重试');
-            } finally {
-                loader.style.display = 'none';
-            }
-        }
-        
-        if (!isDetecting) {
-            // 初始化摄像头
-            try {
-                await setupCamera();
-                console.log('摄像头初始化成功');
-                isDetecting = true;
-                detectFrame();
-                showToast('摄像头启动成功');
-                speakText('摄像头已启动，开始检测');
-            } catch (error) {
-                console.error(error.message);
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'alert alert-danger';
-                errorDiv.innerHTML = `<i class="bx bx-error-circle me-2"></i> ${error.message}`;
-                detectionInterface.querySelector('.container').prepend(errorDiv);
-                showToast(error.message, 'danger');
-                speakText('摄像头启动失败，' + error.message);
-                return;
-            }
-        }
-    }
-    
-    // 开始检测按钮事件
-    startDetectionBtn.addEventListener('click', initDetection);
-    
-    // 拍照按钮事件
-    captureBtn.addEventListener('click', captureFrame);
-    
-    // 切换摄像头按钮事件
-    switchCameraBtn.addEventListener('click', async () => {
-        currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-        await switchCamera(currentFacingMode);
-        showToast(`已切换至${currentFacingMode === 'environment' ? '后置' : '前置'}摄像头`);
-        speakText(`已切换至${currentFacingMode === 'environment' ? '后置' : '前置'}摄像头`);
-    });
-
-    // 添加表单提交事件
-    const contactForm = document.querySelector('.contact-form');
-    if (contactForm) {
-        contactForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const nameInput = document.getElementById('name');
-            const emailInput = document.getElementById('email');
-            const messageInput = document.getElementById('message');
+                    } catch (error) {
+                        console.error('获取模板特征时出错:', error);
+                        reject(error);
+                    }
+                };
+                template.onerror = () => {
+                    console.error('模板图像加载失败');
+                    reject(new Error('模板图像加载失败'));
+                };
+            });
             
-            if (nameInput.value && emailInput.value && messageInput.value) {
-                // 在实际项目中这里会发送数据到服务器
-                showToast('消息已发送，我们会尽快回复您');
-                contactForm.reset();
-            } else {
-                showToast('请填写完整的信息', 'danger');
-            }
-        });
+            isModelLoaded = true;
+            showToast('模型加载成功');
+            speakText('模型加载完成');
+        } catch (error) {
+            console.error('模型加载失败', error);
+            showToast('模型加载失败，请刷新重试: ' + error.message, 'danger');
+            speakText('模型加载失败，请刷新页面重试');
+            if (loader) loader.style.display = 'none';
+            return;
+        } finally {
+            if (loader) loader.style.display = 'none';
+        }
     }
-
-    let lastFrameTime = 0;
-    const minFrameTime = 1000 / 15; // 限制最大帧率为15fps
-
-    async function detectFrame(timestamp = 0) {
-        if (!isDetecting) return;
-        
-        // 控制帧率
-        if (timestamp - lastFrameTime < minFrameTime) {
-            requestAnimationFrame(detectFrame);
+    
+    if (!isDetecting) {
+        // 初始化摄像头
+        try {
+            console.log('开始初始化摄像头');
+            await setupCamera();
+            console.log('摄像头初始化成功');
+            isDetecting = true;
+            detectFrame();
+            showToast('摄像头启动成功');
+            speakText('摄像头已启动，开始检测');
+        } catch (error) {
+            console.error(error.message);
+            isDetecting = false;
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert alert-danger';
+            errorDiv.innerHTML = `<i class="bx bx-error-circle me-2"></i> ${error.message}`;
+            
+            if (detectionInterface && detectionInterface.querySelector('.container')) {
+                detectionInterface.querySelector('.container').prepend(errorDiv);
+            }
+            
+            showToast(error.message, 'danger');
+            speakText('摄像头启动失败，' + error.message);
             return;
         }
-        
-        // 输出实时帧率（仅开发环境）
-        // const fps = 1000 / (timestamp - lastFrameTime);
-        // console.log(`当前帧率: ${fps.toFixed(2)} fps`);
-        
-        lastFrameTime = timestamp;
+    } else {
+        console.log('已经在检测中，不需要重新初始化');
+        showToast('继续检测中');
+    }
+}
 
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+// 检测帧处理
+let lastFrameTime = 0;
+const minFrameTime = 1000 / 15; // 限制最大帧率为15fps
+
+async function detectFrame(timestamp = 0) {
+    if (!isDetecting) return;
+    
+    const video = document.getElementById('videoElement');
+    const cameraCanvas = document.getElementById('cameraCanvas');
+    const ctx = cameraCanvas ? cameraCanvas.getContext('2d') : null;
+    const resultsList = document.getElementById('resultsList');
+    const detectionCount = document.getElementById('detectionCount');
+    
+    if (!video || !cameraCanvas || !ctx || !resultsList) {
+        console.error('检测所需元素未找到');
+        isDetecting = false;
+        return;
+    }
+    
+    // 控制帧率
+    if (timestamp - lastFrameTime < minFrameTime) {
+        requestAnimationFrame(detectFrame);
+        return;
+    }
+    
+    lastFrameTime = timestamp;
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        ctx.drawImage(video, 0, 0, cameraCanvas.width, cameraCanvas.height);
+
+        try {
+            if (!detector) {
+                console.error('检测器未初始化');
+                return;
+            }
+            
+            const result = await detector.detect(cameraCanvas);
+
+            // 清除上一帧
+            ctx.clearRect(0, 0, cameraCanvas.width, cameraCanvas.height);
             ctx.drawImage(video, 0, 0, cameraCanvas.width, cameraCanvas.height);
 
-            try {
-                const result = await detector.detect(cameraCanvas);
-
-                // 清除上一帧
-                ctx.clearRect(0, 0, cameraCanvas.width, cameraCanvas.height);
-                ctx.drawImage(video, 0, 0, cameraCanvas.width, cameraCanvas.height);
-
-                // 更新检测计数
+            // 更新检测计数
+            if (detectionCount) {
                 detectionCount.textContent = result.length;
+            }
 
-                // 绘制检测结果
-                result.forEach(detection => {
-                    const x = detection.x * cameraCanvas.width;
-                    const y = detection.y * cameraCanvas.height;
-                    const w = detection.width * cameraCanvas.width;
-                    const h = detection.height * cameraCanvas.height;
+            // 绘制检测结果
+            result.forEach(detection => {
+                const x = detection.x * cameraCanvas.width;
+                const y = detection.y * cameraCanvas.height;
+                const w = detection.width * cameraCanvas.width;
+                const h = detection.height * cameraCanvas.height;
 
-                    // 绘制边界框
-                    ctx.strokeStyle = '#4361ee';
-                    ctx.lineWidth = 3;
-                    ctx.strokeRect(x - w / 2, y - h / 2, w, h);
+                // 绘制边界框
+                ctx.strokeStyle = '#4361ee';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x - w / 2, y - h / 2, w, h);
 
-                    // 绘制标签背景
-                    ctx.fillStyle = 'rgba(67, 97, 238, 0.85)';
-                    const textWidth = ctx.measureText(detection.class).width;
-                    ctx.fillRect(x - w / 2, y - h / 2 - 30, textWidth + 30, 30);
+                // 绘制标签背景
+                ctx.fillStyle = 'rgba(67, 97, 238, 0.85)';
+                const textWidth = ctx.measureText(detection.class).width;
+                ctx.fillRect(x - w / 2, y - h / 2 - 30, textWidth + 30, 30);
 
-                    // 绘制标签
-                    ctx.fillStyle = '#ffffff';
-                    ctx.font = 'bold 16px Arial';
-                    ctx.fillText(detection.class, x - w / 2 + 10, y - h / 2 - 8);
-                    
-                    // 绘制鼠标悬停效果（仅响应式设计模式下可用）
-                    const boxLeft = x - w / 2;
-                    const boxTop = y - h / 2;
-                    const boxRight = x + w / 2;
-                    const boxBottom = y + h / 2;
-                    
-                    if (window.mouseX && window.mouseY) {
-                        if (window.mouseX >= boxLeft && window.mouseX <= boxRight &&
-                            window.mouseY >= boxTop && window.mouseY <= boxBottom) {
-                            // 当鼠标悬停在检测框上时，显示增强边框
-                            ctx.strokeStyle = '#f72585';
-                            ctx.lineWidth = 4;
-                            ctx.strokeRect(boxLeft, boxTop, w, h);
-                        }
+                // 绘制标签
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 16px Arial';
+                ctx.fillText(detection.class, x - w / 2 + 10, y - h / 2 - 8);
+                
+                // 绘制鼠标悬停效果（仅响应式设计模式下可用）
+                const boxLeft = x - w / 2;
+                const boxTop = y - h / 2;
+                const boxRight = x + w / 2;
+                const boxBottom = y + h / 2;
+                
+                if (window.mouseX && window.mouseY) {
+                    if (window.mouseX >= boxLeft && window.mouseX <= boxRight &&
+                        window.mouseY >= boxTop && window.mouseY <= boxBottom) {
+                        // 当鼠标悬停在检测框上时，显示增强边框
+                        ctx.strokeStyle = '#f72585';
+                        ctx.lineWidth = 4;
+                        ctx.strokeRect(boxLeft, boxTop, w, h);
                     }
-                });
-
-                // 更新检测结果显示
-                updateResultsList(result);
-            } catch (error) {
-                console.error('检测过程发生错误:', error);
-            }
-
-            if (tf.memory().numTensors > 100) {  // 降低阈值
-                tf.disposeVariables();
-                await tf.nextFrame();  // 等待下一帧before继续
-            }
-        }
-
-        requestAnimationFrame(detectFrame);
-    }
-
-    // 鼠标位置跟踪（用于交互效果）
-    window.mouseX = null;
-    window.mouseY = null;
-    
-    cameraCanvas.addEventListener('mousemove', function(e) {
-        const rect = this.getBoundingClientRect();
-        window.mouseX = e.clientX - rect.left;
-        window.mouseY = e.clientY - rect.top;
-    });
-    
-    cameraCanvas.addEventListener('mouseleave', function() {
-        window.mouseX = null;
-        window.mouseY = null;
-    });
-
-    // 更新结果列表
-    function updateResultsList(result) {
-        resultsList.innerHTML = '';
-        
-        if (result.length === 0) {
-            const noResultItem = document.createElement('div');
-            noResultItem.className = 'detection-item';
-            noResultItem.innerHTML = '<p><i class="bx bx-search"></i> 未检测到物体</p>';
-            resultsList.appendChild(noResultItem);
-            return;
-        }
-        
-        result.forEach((detection, index) => {
-            const item = document.createElement('div');
-            item.className = 'detection-item';
-            item.setAttribute('data-index', index);
-            
-            // 计算置信度百分比
-            const confidence = detection.score ? Math.round(detection.score * 100) : '--';
-            
-            // 为不同类别设置不同徽章颜色
-            let badgeColor = 'success';
-            if (confidence < 70) badgeColor = 'warning';
-            if (confidence < 50) badgeColor = 'danger';
-            
-            item.innerHTML = `
-                <div class="d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0">${detection.class}</h6>
-                    <span class="badge bg-${badgeColor}">${confidence}%</span>
-                </div>
-                <p><i class="bx bx-map"></i> 位置：x=${detection.x.toFixed(2)}, y=${detection.y.toFixed(2)}</p>
-                <p><i class="bx bx-box"></i> 尺寸：w=${detection.width.toFixed(2)}, h=${detection.height.toFixed(2)}</p>
-            `;
-            
-            // 添加点击事件
-            item.addEventListener('click', function() {
-                // 高亮相应的检测框
-                highlightDetection(index, detection);
-                
-                // 创建详细信息模态框
-                showDetectionDetail(detection);
+                }
             });
-            
-            resultsList.appendChild(item);
-        });
+
+            // 更新检测结果显示
+            updateResultsList(result);
+        } catch (error) {
+            console.error('检测过程发生错误:', error);
+        }
+
+        // 内存管理，减少内存泄漏
+        if (tf && tf.memory && tf.memory().numTensors > 100) {
+            tf.disposeVariables();
+            if (tf.nextFrame) {
+                await tf.nextFrame();
+            }
+        }
+    }
+
+    requestAnimationFrame(detectFrame);
+}
+
+// 更新结果列表
+function updateResultsList(result) {
+    const resultsList = document.getElementById('resultsList');
+    if (!resultsList) return;
+    
+    resultsList.innerHTML = '';
+    
+    if (result.length === 0) {
+        const noResultItem = document.createElement('div');
+        noResultItem.className = 'detection-item';
+        noResultItem.innerHTML = '<p><i class="bx bx-search"></i> 未检测到物体</p>';
+        resultsList.appendChild(noResultItem);
+        return;
     }
     
-    // 高亮显示选中的检测对象
-    function highlightDetection(index, detection) {
-        // 移除所有项的活跃状态
-        document.querySelectorAll('.detection-item').forEach(item => {
-            item.classList.remove('active');
-        });
+    result.forEach((detection, index) => {
+        const item = document.createElement('div');
+        item.className = 'detection-item';
+        item.setAttribute('data-index', index);
         
-        // 为当前项添加活跃状态
-        const currentItem = document.querySelector(`.detection-item[data-index="${index}"]`);
-        if (currentItem) {
-            currentItem.classList.add('active');
-        }
-        
-        // 在画布上闪烁高亮显示
-        const x = detection.x * cameraCanvas.width;
-        const y = detection.y * cameraCanvas.height;
-        const w = detection.width * cameraCanvas.width;
-        const h = detection.height * cameraCanvas.height;
-        
-        // 保存原始数据
-        const originalImageData = ctx.getImageData(0, 0, cameraCanvas.width, cameraCanvas.height);
-        
-        // 绘制高亮边框
-        function drawHighlight() {
-            ctx.lineWidth = 6;
-            ctx.strokeStyle = '#f72585';
-            ctx.strokeRect(x - w / 2, y - h / 2, w, h);
-            
-            // 添加光晕效果
-            ctx.shadowColor = '#f72585';
-            ctx.shadowBlur = 15;
-            ctx.strokeRect(x - w / 2, y - h / 2, w, h);
-            ctx.shadowBlur = 0;
-        }
-        
-        // 闪烁效果
-        drawHighlight();
-        
-        setTimeout(() => {
-            // 恢复原始图像
-            ctx.putImageData(originalImageData, 0, 0);
-            
-            setTimeout(() => {
-                drawHighlight();
-                
-                setTimeout(() => {
-                    // 最终恢复原始图像
-                    ctx.putImageData(originalImageData, 0, 0);
-                }, 300);
-            }, 300);
-        }, 300);
-        
-        // 朗读检测结果
-        speakText(`检测到${detection.class}，置信度${detection.score ? Math.round(detection.score * 100) : 0}%`);
-    }
-    
-    // 显示检测详情模态框
-    function showDetectionDetail(detection) {
-        // 检查是否已存在模态框，如果存在则先移除
-        let existingModal = document.getElementById('detectionDetailModal');
-        if (existingModal) {
-            existingModal.remove();
-        }
-        
-        // 创建模态框
-        const modalElement = document.createElement('div');
-        modalElement.className = 'modal fade';
-        modalElement.id = 'detectionDetailModal';
-        modalElement.tabIndex = '-1';
-        modalElement.setAttribute('aria-hidden', 'true');
-        
-        // 计算置信度百分比和类别
+        // 计算置信度百分比
         const confidence = detection.score ? Math.round(detection.score * 100) : '--';
         
-        // 模态框内容
-        modalElement.innerHTML = `
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title"><i class="bx bx-detail"></i> 检测详情：${detection.class}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="row mb-3">
-                            <div class="col-6">
-                                <div class="detail-card">
-                                    <span class="detail-label">置信度</span>
-                                    <span class="detail-value">${confidence}%</span>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="detail-card">
-                                    <span class="detail-label">类别</span>
-                                    <span class="detail-value">${detection.class}</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-6">
-                                <div class="detail-card">
-                                    <span class="detail-label">X坐标</span>
-                                    <span class="detail-value">${detection.x.toFixed(4)}</span>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="detail-card">
-                                    <span class="detail-label">Y坐标</span>
-                                    <span class="detail-value">${detection.y.toFixed(4)}</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-6">
-                                <div class="detail-card">
-                                    <span class="detail-label">宽度</span>
-                                    <span class="detail-value">${detection.width.toFixed(4)}</span>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="detail-card">
-                                    <span class="detail-label">高度</span>
-                                    <span class="detail-value">${detection.height.toFixed(4)}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
-                        <button type="button" class="btn btn-primary" id="captureDetailBtn">截图保存</button>
-                        <button type="button" class="btn btn-info" id="readDetailBtn">朗读结果</button>
-                    </div>
-                </div>
+        // 为不同类别设置不同徽章颜色
+        let badgeColor = 'success';
+        if (confidence < 70) badgeColor = 'warning';
+        if (confidence < 50) badgeColor = 'danger';
+        
+        item.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">${detection.class}</h6>
+                <span class="badge bg-${badgeColor}">${confidence}%</span>
             </div>
+            <p><i class="bx bx-map"></i> 位置：x=${detection.x.toFixed(2)}, y=${detection.y.toFixed(2)}</p>
+            <p><i class="bx bx-box"></i> 尺寸：w=${detection.width.toFixed(2)}, h=${detection.height.toFixed(2)}</p>
         `;
         
-        // 添加到页面
-        document.body.appendChild(modalElement);
+        // 添加点击事件
+        item.addEventListener('click', function() {
+            // 高亮相应的检测框
+            highlightDetection(index, detection);
+            
+            // 创建详细信息模态框
+            showDetectionDetail(detection);
+        });
         
-        // 显示模态框
-        const modal = new bootstrap.Modal(modalElement);
-        modal.show();
-        
-        // 为截图按钮添加事件
-        const captureDetailBtn = document.getElementById('captureDetailBtn');
-        if (captureDetailBtn) {
-            captureDetailBtn.addEventListener('click', captureFrame);
-        }
-        
-        // 为朗读按钮添加事件
-        const readDetailBtn = document.getElementById('readDetailBtn');
-        if (readDetailBtn) {
-            readDetailBtn.addEventListener('click', () => {
-                speakText(`检测到${detection.class}，置信度${confidence}%，位置X${detection.x.toFixed(2)}Y${detection.y.toFixed(2)}，尺寸${detection.width.toFixed(2)}乘${detection.height.toFixed(2)}`);
-            });
-        }
-    }
+        resultsList.appendChild(item);
+    });
+}
 
-    // ===== 模板上传功能实现 =====
-    
-    // 初始化模板数据
-    loadUserTemplates();
-    
-    // 上传图片预览
-    const uploadInput = document.getElementById('templateImageUpload');
-    const previewContainer = document.getElementById('uploadPreviewContainer');
-    
-    if (uploadInput) {
-        uploadInput.addEventListener('change', function() {
-            if (this.files && this.files[0]) {
-                const file = this.files[0];
-                
-                // 检查文件类型
-                if (!file.type.match('image.*')) {
-                    showToast('请选择图片文件', 'warning');
-                    return;
-                }
-                
-                // 检查文件大小 (最大5MB)
-                if (file.size > 5 * 1024 * 1024) {
-                    showToast('图片大小不能超过5MB', 'warning');
-                    return;
-                }
-                
-                // 显示预览
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    previewContainer.innerHTML = `
-                        <div class="preview-image">
-                            <img src="${e.target.result}" alt="预览" class="img-fluid">
-                            <button type="button" class="btn-close remove-preview" aria-label="移除"></button>
-                        </div>
-                    `;
-                    
-                    // 添加移除预览的事件
-                    document.querySelector('.remove-preview').addEventListener('click', function() {
-                        previewContainer.innerHTML = '';
-                        uploadInput.value = '';
-                    });
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-    }
-    
-    // 模板表单提交
-    const templateForm = document.getElementById('templateForm');
-    if (templateForm) {
-        templateForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const templateName = document.getElementById('templateName').value;
-            const templateCategory = document.getElementById('templateCategory').value;
-            const templateDescription = document.getElementById('templateDescription').value;
-            const templateImageUpload = document.getElementById('templateImageUpload');
-            
-            // 验证表单
-            if (!templateName || !templateCategory || !templateImageUpload.files[0]) {
-                showToast('请填写完整的模板信息', 'warning');
-                return;
-            }
-            
-            // 在实际应用中，这里应该将文件上传到服务器
-            // 这里仅做前端模拟演示
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                // 创建新模板对象
-                const newTemplate = {
-                    id: Date.now().toString(),
-                    path: e.target.result, // 在真实环境中，这会是服务器返回的URL
-                    name: templateName,
-                    category: templateCategory,
-                    description: templateDescription,
-                    date: new Date().toISOString()
-                };
-                
-                // 添加到模板列表
-                userTemplates.push(newTemplate);
-                saveUserTemplates();
-                
-                // 更新模板展示区
-                updateTemplateGallery();
-                
-                // 重置表单
-                templateForm.reset();
-                previewContainer.innerHTML = '';
-                
-                // 显示成功提示
-                showToast('模板添加成功');
-                speakText(`已成功添加${templateName}模板`);
-            };
-            reader.readAsDataURL(templateImageUpload.files[0]);
-        });
-    }
-    
-    // 加载用户模板
-    function loadUserTemplates() {
-        const savedTemplates = localStorage.getItem('userTemplates');
-        if (savedTemplates) {
-            userTemplates = JSON.parse(savedTemplates);
-            updateTemplateGallery();
-        } else {
-            // 初始化默认模板
-            userTemplates = [
-                {
-                    id: '1',
-                    path: 'templates/000001.jpg',
-                    name: '水杯',
-                    category: '日用品',
-                    description: '日常使用的水杯',
-                    date: new Date().toISOString()
-                },
-                {
-                    id: '2',
-                    path: 'templates/000002.jpg',
-                    name: '手机',
-                    category: '电子设备',
-                    description: '智能手机',
-                    date: new Date().toISOString()
-                },
-                {
-                    id: '3',
-                    path: 'templates/000003.jpg',
-                    name: '钥匙',
-                    category: '日用品',
-                    description: '家门钥匙',
-                    date: new Date().toISOString()
-                }
-            ];
-            saveUserTemplates();
-            updateTemplateGallery();
-        }
-    }
-    
-    // 保存用户模板到本地存储
-    function saveUserTemplates() {
-        localStorage.setItem('userTemplates', JSON.stringify(userTemplates));
-    }
-    
-    // 更新模板展示区
-    function updateTemplateGallery() {
-        const galleryContainer = document.getElementById('templateGallery');
-        if (!galleryContainer) return;
-        
-        galleryContainer.innerHTML = '';
-        
-        if (userTemplates.length === 0) {
-            galleryContainer.innerHTML = '<p class="text-center">暂无模板，请添加新模板</p>';
-            return;
-        }
-        
-        userTemplates.forEach(template => {
-            const templateCard = document.createElement('div');
-            templateCard.className = 'col-md-4 col-sm-6 mb-4';
-            templateCard.innerHTML = `
-                <div class="template-card" data-id="${template.id}">
-                    <div class="template-image">
-                        <img src="${template.path}" alt="${template.name}" class="img-fluid">
-                    </div>
-                    <div class="template-info">
-                        <h5>${template.name}</h5>
-                        <span class="badge bg-primary">${template.category}</span>
-                        <p class="mt-2">${template.description || '无描述'}</p>
-                        <div class="template-actions">
-                            <button type="button" class="btn btn-sm btn-primary use-template">
-                                <i class="bx bx-camera"></i> 使用
-                            </button>
-                            <button type="button" class="btn btn-sm btn-danger delete-template">
-                                <i class="bx bx-trash"></i> 删除
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            galleryContainer.appendChild(templateCard);
-            
-            // 为"使用"按钮添加事件
-            templateCard.querySelector('.use-template').addEventListener('click', function() {
-                const templateId = this.closest('.template-card').getAttribute('data-id');
-                const selectedTemplate = userTemplates.find(t => t.id === templateId);
-                
-                if (selectedTemplate) {
-                    currentTemplate = selectedTemplate;
-                    showToast(`已选择模板: ${selectedTemplate.name}`);
-                    speakText(`已选择${selectedTemplate.name}模板`);
-                    
-                    // 更新当前模板显示
-                    updateCurrentTemplateDisplay();
-                    
-                    // 关闭模态框
-                    const modalElement = document.getElementById('templateModalSelector');
-                    if (modalElement) {
-                        const modal = bootstrap.Modal.getInstance(modalElement);
-                        if (modal) {
-                            modal.hide();
-                        }
-                    }
-                    
-                    // 如果在检测界面，重新应用模板
-                    if (isDetecting && detector) {
-                        // 加载模板图像
-                        const template = new Image();
-                        template.src = selectedTemplate.path;
-                        template.onload = async () => {
-                            const isGotten = await detector.getTemplate(template);
-                            if (isGotten === 0) {
-                                console.log('模板特征获取成功');
-                                showToast('模板已更新');
-                            } else {
-                                console.error('模板特征获取失败');
-                                showToast('模板更新失败', 'danger');
-                            }
-                        };
-                    } else {
-                        // 提示用户进入检测界面
-                        setTimeout(() => {
-                            showToast('请点击"开始检测"使用该模板');
-                        }, 1000);
-                    }
-                }
-            });
-            
-            // 为"删除"按钮添加事件
-            templateCard.querySelector('.delete-template').addEventListener('click', function() {
-                const templateId = this.closest('.template-card').getAttribute('data-id');
-                const templateIndex = userTemplates.findIndex(t => t.id === templateId);
-                
-                if (templateIndex !== -1) {
-                    const templateName = userTemplates[templateIndex].name;
-                    
-                    // 如果要删除的是当前使用的模板，则不允许删除
-                    if (userTemplates[templateIndex].path === currentTemplate.path) {
-                        showToast('无法删除正在使用的模板', 'warning');
-                        speakText('无法删除正在使用的模板');
-                        return;
-                    }
-                    
-                    // 确认删除
-                    if (confirm(`确定要删除模板"${templateName}"吗？`)) {
-                        userTemplates.splice(templateIndex, 1);
-                        saveUserTemplates();
-                        updateTemplateGallery();
-                        showToast(`模板"${templateName}"已删除`);
-                        speakText(`模板${templateName}已删除`);
-                    }
-                }
-            });
-        });
-    }
-    
-    // 打开模板选择模态框
-    const openTemplateModalBtn = document.getElementById('openTemplateModal');
-    if (openTemplateModalBtn) {
-        openTemplateModalBtn.addEventListener('click', function() {
-            updateTemplateGallery();
-            
-            // 检查模态框是否已存在
-            let modalElement = document.getElementById('templateModalSelector');
-            if (!modalElement) {
-                // 创建模态框
-                modalElement = document.createElement('div');
-                modalElement.className = 'modal fade';
-                modalElement.id = 'templateModalSelector';
-                modalElement.tabIndex = '-1';
-                modalElement.setAttribute('aria-hidden', 'true');
-                
-                // 模态框内容
-                modalElement.innerHTML = `
-                    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title"><i class="bx bx-images"></i> 选择检测模板</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="row" id="templateGallery">
-                                    <!-- 模板卡片将通过JavaScript动态添加 -->
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
-                                <a href="#upload-section" class="btn btn-primary" data-bs-dismiss="modal">添加新模板</a>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                
-                // 添加到页面
-                document.body.appendChild(modalElement);
-            }
-            
-            // 显示模态框
-            const modal = new bootstrap.Modal(modalElement);
-            modal.show();
-        });
-    }
+// 鼠标位置跟踪（用于交互效果）
+window.mouseX = null;
+window.mouseY = null;
 
-    // 打开语音帮助模态框
-    const voiceHelpBtn = document.getElementById('voiceHelpBtn');
-    if (voiceHelpBtn) {
-        voiceHelpBtn.addEventListener('click', function() {
-            // 检查模态框是否已存在
-            let modalElement = document.getElementById('voiceHelpModal');
-            if (!modalElement) {
-                // 创建模态框
-                modalElement = document.createElement('div');
-                modalElement.className = 'modal fade';
-                modalElement.id = 'voiceHelpModal';
-                modalElement.tabIndex = '-1';
-                modalElement.setAttribute('aria-hidden', 'true');
-                
-                // 模态框内容
-                modalElement.innerHTML = `
-                    <div class="modal-dialog modal-dialog-centered">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title"><i class="bx bx-microphone"></i> 语音命令帮助</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="voice-help-list">
-                                    <div class="voice-help-item">
-                                        <h6><i class="bx bx-camera"></i> 开始检测</h6>
-                                        <p>进入相机检测界面</p>
-                                    </div>
-                                    <div class="voice-help-item">
-                                        <h6><i class="bx bx-search"></i> 寻找[物品名称]</h6>
-                                        <p>开始寻找指定物品，例如"寻找水杯"</p>
-                                    </div>
-                                    <div class="voice-help-item">
-                                        <h6><i class="bx bx-refresh"></i> 切换摄像头</h6>
-                                        <p>在前置和后置摄像头之间切换</p>
-                                    </div>
-                                    <div class="voice-help-item">
-                                        <h6><i class="bx bx-camera"></i> 拍照/截图</h6>
-                                        <p>保存当前检测画面</p>
-                                    </div>
-                                    <div class="voice-help-item">
-                                        <h6><i class="bx bx-message-detail"></i> 朗读结果</h6>
-                                        <p>朗读当前的检测结果</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">我知道了</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                
-                // 添加到页面
-                document.body.appendChild(modalElement);
-            }
-            
-            // 显示模态框
-            const modal = new bootstrap.Modal(modalElement);
-            modal.show();
+document.addEventListener('DOMContentLoaded', () => {
+    const cameraCanvas = document.getElementById('cameraCanvas');
+    if (cameraCanvas) {
+        cameraCanvas.addEventListener('mousemove', function(e) {
+            const rect = this.getBoundingClientRect();
+            window.mouseX = e.clientX - rect.left;
+            window.mouseY = e.clientY - rect.top;
+        });
+        
+        cameraCanvas.addEventListener('mouseleave', function() {
+            window.mouseX = null;
+            window.mouseY = null;
         });
     }
 });
+
+// 高亮显示选中的检测对象
+function highlightDetection(index, detection) {
+    const cameraCanvas = document.getElementById('cameraCanvas');
+    const ctx = cameraCanvas ? cameraCanvas.getContext('2d') : null;
+    if (!cameraCanvas || !ctx) return;
+    
+    // 移除所有项的活跃状态
+    document.querySelectorAll('.detection-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    
+    // 为当前项添加活跃状态
+    const currentItem = document.querySelector(`.detection-item[data-index="${index}"]`);
+    if (currentItem) {
+        currentItem.classList.add('active');
+    }
+    
+    // 在画布上闪烁高亮显示
+    const x = detection.x * cameraCanvas.width;
+    const y = detection.y * cameraCanvas.height;
+    const w = detection.width * cameraCanvas.width;
+    const h = detection.height * cameraCanvas.height;
+    
+    // 保存原始数据
+    const originalImageData = ctx.getImageData(0, 0, cameraCanvas.width, cameraCanvas.height);
+    
+    // 绘制高亮边框
+    function drawHighlight() {
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = '#f72585';
+        ctx.strokeRect(x - w / 2, y - h / 2, w, h);
+        
+        // 添加光晕效果
+        ctx.shadowColor = '#f72585';
+        ctx.shadowBlur = 15;
+        ctx.strokeRect(x - w / 2, y - h / 2, w, h);
+        ctx.shadowBlur = 0;
+    }
+    
+    // 闪烁效果
+    drawHighlight();
+    
+    setTimeout(() => {
+        // 恢复原始图像
+        ctx.putImageData(originalImageData, 0, 0);
+        
+        setTimeout(() => {
+            drawHighlight();
+            
+            setTimeout(() => {
+                // 最终恢复原始图像
+                ctx.putImageData(originalImageData, 0, 0);
+            }, 300);
+        }, 300);
+    }, 300);
+    
+    // 朗读检测结果
+    speakText(`检测到${detection.class}，置信度${detection.score ? Math.round(detection.score * 100) : 0}%`);
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  console.log('DOM加载完成，初始化应用');
+  
+  // 获取按钮元素
+  const startDetectionBtn = document.getElementById('startDetectionBtn');
+  const frontCameraBtn = document.getElementById('frontCameraBtn');
+  const backCameraBtn = document.getElementById('backCameraBtn');
+  const uploadTemplateBtn = document.getElementById('uploadTemplateBtn');
+  const templateUploadForm = document.getElementById('templateUploadForm');
+  
+  // 增加按钮事件监听
+  if (startDetectionBtn) {
+    console.log('绑定开始检测按钮事件');
+    startDetectionBtn.addEventListener('click', () => {
+      console.log('开始检测按钮被点击');
+      initDetection(); // 调用检测初始化函数
+    });
+  }
+  
+  // 添加相机切换按钮事件
+  if (frontCameraBtn) {
+    frontCameraBtn.addEventListener('click', () => {
+      switchCamera('user');
+      showToast('已切换至前置摄像头');
+    });
+  }
+  
+  if (backCameraBtn) {
+    backCameraBtn.addEventListener('click', () => {
+      switchCamera('environment');
+      showToast('已切换至后置摄像头');
+    });
+  }
+  
+  // 初始化摄像头
+  async function setupCamera() {
+    const video = document.getElementById('videoElement');
+    if (!video) {
+      throw new Error('未找到视频元素');
+    }
+    
+    // 停止之前的媒体流
+    if (video.srcObject) {
+      const tracks = video.srcObject.getTracks();
+      tracks.forEach(track => track.stop());
+    }
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: currentFacingMode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      });
+      
+      video.srcObject = stream;
+      
+      return new Promise((resolve) => {
+        video.onloadedmetadata = () => {
+          video.play().then(() => {
+            resolve(video);
+          }).catch(error => {
+            console.error('视频播放失败:', error);
+            throw new Error('无法播放摄像头视频');
+          });
+        };
+      });
+    } catch (error) {
+      console.error('摄像头访问失败:', error);
+      if (error.name === 'NotAllowedError') {
+        throw new Error('摄像头访问被拒绝，请授予权限');
+      } else if (error.name === 'NotFoundError') {
+        throw new Error('未找到可用摄像头设备');
+      } else {
+        throw new Error('摄像头启动失败: ' + error.message);
+      }
+    }
+  }
+
+  // 处理模板上传
+  if (templateUploadForm) {
+    templateUploadForm.addEventListener('submit', handleTemplateUpload);
+  }
+  
+  // 模板上传处理函数
+  async function handleTemplateUpload(event) {
+    event.preventDefault();
+    
+    const templateName = document.getElementById('templateName');
+    const templateCategory = document.getElementById('templateCategory');
+    const templateDescription = document.getElementById('templateDescription');
+    const templateFile = document.getElementById('templateImageUpload');
+    const uploadTemplateBtn = document.getElementById('uploadTemplateBtn');
+    
+    if (!templateName || !templateCategory || !templateDescription || !templateFile) {
+      showToast('表单元素未找到', 'danger');
+      return;
+    }
+    
+    // 表单验证
+    if (!templateName.value.trim()) {
+      showToast('请输入模板名称', 'warning');
+      templateName.focus();
+      return;
+    }
+    
+    if (!templateFile.files || templateFile.files.length === 0) {
+      showToast('请选择模板图像', 'warning');
+      return;
+    }
+    
+    // 检查文件类型
+    const file = templateFile.files[0];
+    if (!file.type.match('image.*')) {
+      showToast('请选择有效的图像文件', 'danger');
+      return;
+    }
+    
+    // 显示加载状态
+    if (uploadTemplateBtn) {
+      uploadTemplateBtn.disabled = true;
+      uploadTemplateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 上传中...';
+    }
+    
+    try {
+      // 读取图像文件
+      const imageUrl = await readFileAsDataURL(file);
+      
+      // 保存模板信息
+      const template = {
+        id: Date.now().toString(),
+        name: templateName.value.trim(),
+        category: templateCategory.value.trim(),
+        description: templateDescription.value.trim(),
+        path: imageUrl,
+        date: new Date().toISOString()
+      };
+      
+      // 保存至本地存储
+      addUserTemplate(template);
+      
+      // 更新当前模板
+      setCurrentTemplate(template);
+      
+      // 显示成功消息
+      showToast('模板上传成功', 'success');
+      
+      // 关闭模态框
+      const uploadModal = document.getElementById('uploadTemplateModal');
+      if (uploadModal && typeof bootstrap !== 'undefined') {
+        const modal = bootstrap.Modal.getInstance(uploadModal);
+        if (modal) modal.hide();
+      }
+      
+      // 重置表单
+      templateUploadForm.reset();
+      
+      // 更新模板展示
+      updateTemplateDisplay();
+      
+    } catch (error) {
+      console.error('模板上传失败', error);
+      showToast('模板上传失败: ' + error.message, 'danger');
+    } finally {
+      // 恢复按钮状态
+      if (uploadTemplateBtn) {
+        uploadTemplateBtn.disabled = false;
+        uploadTemplateBtn.innerHTML = '<i class="bx bx-upload"></i> 上传并创建模板';
+      }
+    }
+  }
+  
+  // 将文件转换为Data URL
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = (e) => reject(new Error('文件读取失败'));
+      reader.readAsDataURL(file);
+    });
+  }
+  
+  // 添加用户模板到localStorage
+  function addUserTemplate(template) {
+    const templates = getUserTemplates();
+    templates.push(template);
+    saveUserTemplates(templates);
+  }
+  
+  // 保存用户模板到localStorage
+  function saveUserTemplates(templates) {
+    try {
+      localStorage.setItem('userTemplates', JSON.stringify(templates));
+      console.log('模板已保存到localStorage');
+    } catch (error) {
+      console.error('保存模板失败', error);
+      showToast('保存模板失败: ' + error.message, 'danger');
+    }
+  }
+  
+  // 获取用户模板列表
+  function getUserTemplates() {
+    try {
+      const templates = localStorage.getItem('userTemplates');
+      return templates ? JSON.parse(templates) : [];
+    } catch (error) {
+      console.error('读取模板失败', error);
+      showToast('读取模板失败，将使用空列表', 'warning');
+      return [];
+    }
+  }
+
+  // 初始化应用
+  initApp();
+});
+
+// 初始化应用程序
+async function initApp() {
+  console.log('初始化应用程序');
+  
+  // 加载用户模板
+  loadUserTemplates();
+  
+  // 更新模板显示
+  updateTemplateDisplay();
+  
+  // 设置图像预览
+  setupImagePreview();
+  
+  // 初始化语音识别
+  initVoiceRecognition();
+}
+
+// 加载用户模板
+function loadUserTemplates() {
+  console.log('加载用户模板');
+  try {
+    const templates = localStorage.getItem('userTemplates');
+    userTemplates = templates ? JSON.parse(templates) : [];
+    
+    if (userTemplates.length > 0) {
+      console.log(`已加载${userTemplates.length}个模板`);
+      // 设置当前模板为最后一个添加的模板
+      setCurrentTemplate(userTemplates[userTemplates.length - 1]);
+    } else {
+      console.log('未找到已保存的模板');
+    }
+  } catch (error) {
+    console.error('加载模板失败', error);
+    userTemplates = [];
+  }
+}
+
+// 设置当前选中的模板
+function setCurrentTemplate(template) {
+  if (!template) return;
+  
+  currentTemplate = template;
+  
+  // 更新当前模板显示
+  const currentTemplateName = document.getElementById('currentTemplateName');
+  const currentTemplateImage = document.getElementById('currentTemplateImage');
+  
+  if (currentTemplateName) {
+    currentTemplateName.textContent = template.name;
+  }
+  
+  if (currentTemplateImage) {
+    currentTemplateImage.src = template.path;
+    currentTemplateImage.alt = template.name;
+  }
+  
+  console.log('当前模板已设置为:', template.name);
+}
+
+// 显示模板详情
+function showTemplateDetail(template) {
+  if (!template) return;
+  
+  const detailModal = document.getElementById('templateDetailModal');
+  const templateDetailImage = document.getElementById('templateDetailImage');
+  const templateDetailName = document.getElementById('templateDetailName');
+  const templateDetailCategory = document.getElementById('templateDetailCategory');
+  const templateDetailDescription = document.getElementById('templateDetailDescription');
+  const templateDetailDate = document.getElementById('templateDetailDate');
+  const selectTemplateBtn = document.getElementById('selectTemplateBtn');
+  
+  if (!detailModal) return;
+  
+  if (templateDetailImage) templateDetailImage.src = template.path;
+  if (templateDetailName) templateDetailName.textContent = template.name;
+  if (templateDetailCategory) templateDetailCategory.textContent = template.category;
+  if (templateDetailDescription) templateDetailDescription.textContent = template.description;
+  
+  if (templateDetailDate && template.date) {
+    const date = new Date(template.date);
+    templateDetailDate.textContent = date.toLocaleString();
+  }
+  
+  if (selectTemplateBtn) {
+    selectTemplateBtn.onclick = () => {
+      setCurrentTemplate(template);
+      
+      // 关闭模态框
+      if (typeof bootstrap !== 'undefined') {
+        const modal = bootstrap.Modal.getInstance(detailModal);
+        if (modal) modal.hide();
+      }
+    };
+  }
+  
+  // 显示模态框
+  if (typeof bootstrap !== 'undefined') {
+    const modal = new bootstrap.Modal(detailModal);
+    modal.show();
+  }
+}
+
+// 更新模板展示
+function updateTemplateDisplay() {
+  const templatesList = document.getElementById('templatesList');
+  if (!templatesList) return;
+  
+  // 清空现有内容
+  templatesList.innerHTML = '';
+  
+  if (!userTemplates || userTemplates.length === 0) {
+    templatesList.innerHTML = `
+      <div class="text-center p-4">
+        <i class="bx bx-image bx-lg text-muted"></i>
+        <p class="text-muted">未找到模板，请上传新模板</p>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadTemplateModal">
+          <i class="bx bx-plus"></i> 上传模板
+        </button>
+      </div>
+    `;
+    return;
+  }
+  
+  // 创建模板卡片
+  userTemplates.forEach((template, index) => {
+    const card = document.createElement('div');
+    card.className = 'col-md-4 mb-4';
+    card.innerHTML = `
+      <div class="card template-card ${currentTemplate && currentTemplate.id === template.id ? 'active' : ''}">
+        <div class="template-image-container">
+          <img src="${template.path}" class="card-img-top template-image" alt="${template.name}">
+        </div>
+        <div class="card-body">
+          <h5 class="card-title">${template.name}</h5>
+          <p class="card-text small text-muted">${template.category}</p>
+          <div class="btn-group w-100">
+            <button class="btn btn-outline-primary btn-sm view-template" data-index="${index}">
+              <i class="bx bx-show"></i> 查看
+            </button>
+            <button class="btn btn-outline-success btn-sm select-template" data-index="${index}">
+              <i class="bx bx-check"></i> 选择
+            </button>
+            <button class="btn btn-outline-danger btn-sm delete-template" data-index="${index}">
+              <i class="bx bx-trash"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    templatesList.appendChild(card);
+  });
+  
+  // 绑定卡片上的按钮事件
+  document.querySelectorAll('.view-template').forEach(button => {
+    button.addEventListener('click', function() {
+      const index = parseInt(this.getAttribute('data-index'));
+      showTemplateDetail(userTemplates[index]);
+    });
+  });
+  
+  document.querySelectorAll('.select-template').forEach(button => {
+    button.addEventListener('click', function() {
+      const index = parseInt(this.getAttribute('data-index'));
+      setCurrentTemplate(userTemplates[index]);
+      
+      // 更新活跃状态
+      document.querySelectorAll('.template-card').forEach(card => card.classList.remove('active'));
+      this.closest('.template-card').classList.add('active');
+      
+      showToast('已选择模板: ' + userTemplates[index].name);
+    });
+  });
+  
+  document.querySelectorAll('.delete-template').forEach(button => {
+    button.addEventListener('click', function() {
+      const index = parseInt(this.getAttribute('data-index'));
+      
+      if (confirm(`确定要删除模板 "${userTemplates[index].name}" 吗？`)) {
+        deleteTemplate(index);
+      }
+    });
+  });
+}
+
+// 删除模板
+function deleteTemplate(index) {
+  if (index < 0 || index >= userTemplates.length) return;
+  
+  const deletedTemplate = userTemplates[index];
+  
+  // 从数组中删除
+  userTemplates.splice(index, 1);
+  
+  // 保存更新后的模板列表
+  saveUserTemplates(userTemplates);
+  
+  // 如果删除的是当前选中的模板，则重置当前模板
+  if (currentTemplate && currentTemplate.id === deletedTemplate.id) {
+    if (userTemplates.length > 0) {
+      setCurrentTemplate(userTemplates[0]);
+    } else {
+      currentTemplate = null;
+      
+      const currentTemplateName = document.getElementById('currentTemplateName');
+      const currentTemplateImage = document.getElementById('currentTemplateImage');
+      
+      if (currentTemplateName) currentTemplateName.textContent = '未选择模板';
+      if (currentTemplateImage) {
+        currentTemplateImage.src = 'assets/images/no-image.png';
+        currentTemplateImage.alt = '未选择模板';
+      }
+    }
+  }
+  
+  // 更新模板展示
+  updateTemplateDisplay();
+  
+  showToast('模板已删除', 'info');
+}
+
+// 设置图像预览
+function setupImagePreview() {
+  const templateFile = document.getElementById('templateImageUpload');
+  const previewContainer = document.getElementById('previewContainer');
+  const imagePreview = document.getElementById('imagePreview');
+  const previewImg = document.getElementById('previewImg');
+  
+  if (!templateFile || !previewContainer || !imagePreview || !previewImg) {
+    console.log('预览所需元素未找到');
+    return;
+  }
+  
+  templateFile.addEventListener('change', function(event) {
+    if (this.files && this.files[0]) {
+      const file = this.files[0];
+      
+      // 检查文件类型
+      if (!file.type.match('image.*')) {
+        showToast('请选择有效的图像文件', 'danger');
+        return;
+      }
+      
+      const reader = new FileReader();
+      
+      reader.onload = function(e) {
+        previewImg.src = e.target.result;
+        previewContainer.style.display = 'none';
+        imagePreview.style.display = 'block';
+      };
+      
+      reader.readAsDataURL(file);
+    } else {
+      previewContainer.style.display = 'block';
+      imagePreview.style.display = 'none';
+    }
+  });
+  
+  // 添加移除预览图片的功能
+  const removeImageBtn = document.getElementById('removeImageBtn');
+  if (removeImageBtn) {
+    removeImageBtn.addEventListener('click', function() {
+      previewContainer.style.display = 'block';
+      imagePreview.style.display = 'none';
+      templateFile.value = '';
+    });
+  }
+}
+
+// 显示检测详情
+function showDetectionDetail(detection) {
+  // 实现检测结果的详细展示
+  console.log('显示检测详情', detection);
+}
