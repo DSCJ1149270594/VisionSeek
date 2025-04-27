@@ -73,6 +73,59 @@
     .toast-info i {
       color: #17a2b8;
     }
+
+    /* 检测状态指示器样式 */
+    .detection-status {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      display: flex;
+      align-items: center;
+      background: rgba(0,0,0,0.5);
+      border-radius: 20px;
+      padding: 5px 10px;
+      color: white;
+    }
+    
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    
+    .status-initializing {
+      background-color: #ffc107;
+    }
+    
+    .status-loading {
+      background-color: #17a2b8;
+      animation: pulse 1.5s infinite;
+    }
+    
+    .status-ready {
+      background-color: #28a745;
+    }
+    
+    .status-error {
+      background-color: #dc3545;
+    }
+    
+    .status-active {
+      background-color: #007bff;
+      animation: pulse 1.5s infinite;
+    }
+    
+    .status-text {
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
   </style>
 </head>
 
@@ -223,6 +276,11 @@
                 <i class="bx bx-volume-full"></i>
               </button>
             </div>
+            <!-- 添加状态指示器 -->
+            <div class="detection-status">
+              <div id="statusIndicator" class="status-initializing"></div>
+              <div id="statusText" class="status-text">未初始化</div>
+            </div>
           </div>
           <div class="mt-4">
             <div class="card detection-results">
@@ -232,6 +290,14 @@
               </div>
               <div class="card-body">
                 <div id="resultsList" class="results-container"></div>
+              </div>
+              <div class="card-footer">
+                <button id="startButton" class="btn btn-primary btn-sm rounded-pill" disabled>
+                  <i class="bx bx-play-circle me-1"></i> 开始检测
+                </button>
+                <button id="detectionStats" class="btn btn-sm btn-outline-primary rounded-pill ms-2" style="display: none;">
+                  <i class="bx bx-stats me-1"></i> 检测数据
+                </button>
               </div>
             </div>
           </div>
@@ -294,7 +360,7 @@
                     <div class="form-text">支持JPG、PNG格式，最佳分辨率为640×480像素</div>
                   </div>
                   <div class="d-grid">
-                    <button type="submit" class="btn btn-primary" id="uploadTemplateBtn">
+                    <button type="button" class="btn btn-primary" id="uploadTemplateBtn">
                       <i class="bx bx-upload"></i> 上传并创建模板
                     </button>
                   </div>
@@ -1031,441 +1097,101 @@
   <script src="js/yoloDetector.js"></script>
   <script src="js/main.js"></script>
   
-  <!-- 核心检测实现，直接内联在HTML中 -->
+  <!-- 核心检测功能初始化 -->
   <script>
-    // 全局变量
-    let currentFacingMode = 'environment'; // 默认使用后置摄像头
-    let isDetecting = false;
-    let currentTemplate = {
-      path: 'templates/000001.jpg',
-      name: '默认模板',
-      category: 'default',
-      date: new Date().toISOString()
-    };
-
-    // 直接在HTML中实现initDetection函数，不依赖外部JS
-    function initDetection() {
-      console.log('使用HTML内联的initDetection函数');
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('DOM已加载，准备初始化应用');
       
-      // 显示加载状态
-      const loader = document.getElementById('loader');
-      if (loader) loader.style.display = 'flex';
+      // 初始化AOS动画库
+      AOS.init({
+        duration: 800,
+        easing: 'ease-in-out',
+        once: true,
+        mirror: false
+      });
       
-      // 显示检测界面
-      const detectionInterface = document.getElementById('detection-interface');
-      if (detectionInterface) {
-        detectionInterface.style.display = 'block';
-        window.scrollTo({
-          top: detectionInterface.offsetTop - 80,
-          behavior: 'smooth'
-        });
-      } else {
-        console.error('未找到检测界面元素');
-        if (loader) loader.style.display = 'none';
-        alert('检测界面加载失败，请刷新页面重试');
-        return;
-      }
+      // 初始化工具提示
+      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+      });
       
-      // 设置Canvas尺寸
-      const cameraCanvas = document.getElementById('cameraCanvas');
-      if (cameraCanvas && cameraCanvas.parentElement) {
-        const containerWidth = cameraCanvas.parentElement.clientWidth;
-        const containerHeight = cameraCanvas.parentElement.clientHeight || 480;
-        cameraCanvas.width = containerWidth;
-        cameraCanvas.height = containerHeight;
-      }
-
-      // 尝试访问摄像头
-      if (!isDetecting) {
-        setupCamera()
-          .then(function() {
-            console.log('摄像头设置成功');
-            isDetecting = true;
-            detectFrame();
-            showToast('摄像头启动成功');
-            if (loader) loader.style.display = 'none';
-          })
-          .catch(function(error) {
-            console.error('摄像头访问失败:', error);
-            if (loader) loader.style.display = 'none';
-            
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'alert alert-danger';
-            errorDiv.innerHTML = `<i class="bx bx-error-circle me-2"></i> ${error.message}`;
-            
-            if (detectionInterface && detectionInterface.querySelector('.container')) {
-              detectionInterface.querySelector('.container').prepend(errorDiv);
-            }
-            
-            showToast(error.message, 'danger');
-            isDetecting = false;
-          });
-      } else {
-        console.log('已经在检测中，不需要重新初始化');
-        showToast('继续检测中');
-        if (loader) loader.style.display = 'none';
-      }
-    }
-
-    // 设置摄像头函数
-    async function setupCamera() {
-      const video = document.getElementById('videoElement');
-      if (!video) {
-        throw new Error('未找到视频元素');
-      }
-      
-      // 停止之前的媒体流
-      if (video.srcObject) {
-        const tracks = video.srcObject.getTracks();
-        tracks.forEach(track => track.stop());
-      }
-      
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: currentFacingMode },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
-          audio: false
-        });
-        
-        video.srcObject = stream;
-        
-        return new Promise((resolve) => {
-          video.onloadedmetadata = () => {
-            video.play().then(() => {
-              resolve(video);
-            }).catch(error => {
-              console.error('视频播放失败:', error);
-              throw new Error('无法播放摄像头视频');
-            });
-          };
-        });
-      } catch (error) {
-        console.error('摄像头访问失败:', error);
-        if (error.name === 'NotAllowedError') {
-          throw new Error('摄像头访问被拒绝，请授予权限');
-        } else if (error.name === 'NotFoundError') {
-          throw new Error('未找到可用摄像头设备');
-        } else {
-          throw new Error('摄像头启动失败: ' + error.message);
-        }
-      }
-    }
-
-    // 基础的检测帧处理
-    function detectFrame() {
-      if (!isDetecting) return;
-      
-      const video = document.getElementById('videoElement');
-      const cameraCanvas = document.getElementById('cameraCanvas');
-      const ctx = cameraCanvas ? cameraCanvas.getContext('2d') : null;
-      
-      if (!video || !cameraCanvas || !ctx) {
-        console.error('检测所需元素未找到');
-        isDetecting = false;
-        return;
-      }
-      
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        // 绘制视频帧到canvas
-        ctx.drawImage(video, 0, 0, cameraCanvas.width, cameraCanvas.height);
-        
-        // 如果有TensorFlow.js和模型加载成功，尝试进行检测
-        if (window.tf && window.mobilenet) {
-          try {
-            // 这里可以添加实际的检测逻辑
-            // 现在先只显示提示信息
-            const resultsList = document.getElementById('resultsList');
-            if (resultsList && !resultsList.hasChildNodes()) {
-              resultsList.innerHTML = '<div class="alert alert-info">摄像头已成功启动，检测功能正在初始化...</div>';
-            }
-          } catch (error) {
-            console.error('检测过程中发生错误:', error);
+      // 回到顶部按钮
+      const scrollToTopBtn = document.getElementById('scrollToTop');
+      if(scrollToTopBtn) {
+        window.addEventListener('scroll', function() {
+          if (window.scrollY > 300) {
+            scrollToTopBtn.classList.add('active');
+          } else {
+            scrollToTopBtn.classList.remove('active');
           }
-        }
-      }
-      
-      // 循环调用以形成动画
-      requestAnimationFrame(detectFrame);
-    }
-
-    // 摄像头切换函数
-    async function switchCamera() {
-      currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-      console.log(`切换至${currentFacingMode === 'environment' ? '后置' : '前置'}摄像头`);
-      
-      try {
-        // 如果已经在检测中，重新设置摄像头
-        if (isDetecting) {
-          await setupCamera();
-          showToast(`已切换至${currentFacingMode === 'environment' ? '后置' : '前置'}摄像头`);
-        }
-      } catch (error) {
-        console.error('切换摄像头失败:', error);
-        showToast('切换摄像头失败: ' + error.message, 'danger');
-      }
-    }
-
-    // 截图功能
-    function captureFrame() {
-      const canvas = document.getElementById('cameraCanvas');
-      if (!canvas) return;
-      
-      // 创建一个临时链接并触发下载
-      const link = document.createElement('a');
-      link.download = `visionseek-capture-${new Date().toISOString()}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-      
-      showToast('已保存检测画面');
-    }
-
-    // 显示消息提示
-    function showToast(message, type = 'success') {
-      // 如果已有toast则先移除
-      let existingToast = document.querySelector('.toast-message');
-      if (existingToast) {
-        existingToast.remove();
-      }
-      
-      // 创建toast元素
-      const toast = document.createElement('div');
-      toast.className = `toast-message toast-${type}`;
-      toast.innerHTML = `
-        <div class="toast-content">
-          <i class="bx bx-${type === 'success' ? 'check' : 'x'}-circle"></i>
-          <span>${message}</span>
-        </div>
-      `;
-      
-      // 添加到页面
-      document.body.appendChild(toast);
-      
-      // 显示toast
-      setTimeout(() => toast.classList.add('show'), 10);
-      
-      // 3秒后自动移除
-      setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-      }, 3000);
-    }
-    
-    // 朗读检测结果
-    function readDetectionResults() {
-      const resultsList = document.getElementById('resultsList');
-      if (!resultsList) return;
-      
-      let resultsText = '';
-      
-      if (!resultsList.hasChildNodes()) {
-        resultsText = '当前未检测到物体';
-      } else {
-        resultsText = '检测结果正在处理中';
-      }
-      
-      // 如果浏览器支持语音合成
-      if (window.speechSynthesis) {
-        const utterance = new SpeechSynthesisUtterance(resultsText);
-        utterance.lang = 'zh-CN';
-        speechSynthesis.speak(utterance);
-      } else {
-        // 不支持语音合成则使用提示
-        alert(resultsText);
-      }
-    }
-    
-    // 初始化AOS动画库
-    AOS.init({
-      duration: 800,
-      easing: 'ease-in-out',
-      once: true,
-      mirror: false
-    });
-    
-    // 初始化工具提示
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-      return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-    
-    // 回到顶部按钮
-    const scrollToTopBtn = document.getElementById('scrollToTop');
-    window.addEventListener('scroll', function() {
-      if (window.scrollY > 300) {
-        scrollToTopBtn.classList.add('active');
-      } else {
-        scrollToTopBtn.classList.remove('active');
-      }
-    });
-    
-    scrollToTopBtn.addEventListener('click', function() {
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
-    });
-    
-    // 从模态框中的按钮开始检测
-    document.getElementById('startDetectionFromModal').addEventListener('click', function() {
-      document.getElementById('startDetection').click();
-    });
-    
-    document.getElementById('startDetectionFromModal2').addEventListener('click', function() {
-      document.getElementById('startDetection').click();
-    });
-    
-    document.getElementById('startDetectionFromModal3').addEventListener('click', function() {
-      document.getElementById('startDetection').click();
-    });
-
-    // 添加上传预览功能
-    document.getElementById('templateImageUpload').addEventListener('change', function() {
-      const file = this.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          document.getElementById('previewContainer').innerHTML = `
-            <div class="preview-image">
-              <img src="${e.target.result}" alt="预览" class="img-fluid rounded">
-              <button type="button" class="btn-close remove-preview" aria-label="移除"></button>
-            </div>
-          `;
-          
-          document.querySelector('.remove-preview').addEventListener('click', function() {
-            document.getElementById('previewContainer').innerHTML = `
-              <i class="bx bx-image-add"></i>
-              <p>预览区域</p>
-            `;
-            document.getElementById('templateImageUpload').value = '';
+        });
+        
+        scrollToTopBtn.addEventListener('click', function() {
+          window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
           });
-        };
-        reader.readAsDataURL(file);
+        });
       }
-    });
-    
-    // 确保语音控制按钮正常工作
-    document.getElementById('startVoiceBtn').addEventListener('click', function() {
-      if (typeof startListening === 'function') {
-        startListening();
-      } else {
-        console.error('语音识别功能未加载');
-        alert('语音识别功能未能正确加载，请检查您的浏览器是否支持语音识别API。');
-      }
-    });
-    
-    // 样例模板查看详情
-    document.querySelectorAll('.template-view').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const templateCard = this.closest('.template-card');
-        const templateImg = templateCard.querySelector('img').src;
-        const templateName = templateCard.querySelector('.template-name').textContent;
-        const templateCategory = templateCard.querySelector('.badge').textContent;
-        const templateDesc = templateCard.querySelector('.template-date').textContent;
-        
-        // 填充模态框内容
-        document.getElementById('detailTemplateImg').src = templateImg;
-        document.getElementById('detailTemplateName').textContent = templateName;
-        document.getElementById('detailTemplateCategory').textContent = templateCategory;
-        document.getElementById('detailTemplateDate').textContent = new Date().toLocaleDateString();
-        document.getElementById('detailTemplateDesc').textContent = templateDesc;
-        
-        // 显示模态框
-        const modal = new bootstrap.Modal(document.getElementById('templateDetailModal'));
-        modal.show();
-      });
-    });
-    
-    // 样例模板使用功能
-    document.querySelectorAll('.use-template').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const templateCard = this.closest('.template-card');
-        const templateName = templateCard.querySelector('.template-name').textContent;
-        
-        // 显示toast通知
-        alert(`已选择模板: ${templateName}`);
-        
-        // 滚动到检测界面
-        document.getElementById('startDetection').click();
-      });
-    });
-    
-    // 为动态生成的模板卡片添加事件(实际应用中会由main.js处理)
-    function addTemplateCardEvents() {
-      // 这里是示例代码，实际会由main.js中的代码处理
-      console.log('Template card events initialized');
-    }
-    
-    // 页面加载完成后初始化
-    window.addEventListener('load', function() {
-      // 初始化模板卡片事件
-      addTemplateCardEvents();
       
-      // 添加页面滚动动画
-      window.addEventListener('scroll', function() {
-        if (window.scrollY > 50) {
-          document.querySelector('.navbar').classList.add('navbar-scrolled');
-        } else {
-          document.querySelector('.navbar').classList.remove('navbar-scrolled');
+      // 从模态框中启动检测
+      document.querySelectorAll('#startDetectionFromModal, #startDetectionFromModal2, #startDetectionFromModal3').forEach(btn => {
+        if (btn) {
+          btn.addEventListener('click', function() {
+            const startDetectionBtn = document.getElementById('startDetection');
+            if (startDetectionBtn) startDetectionBtn.click();
+          });
         }
       });
       
-      // 添加开始检测按钮事件监听
+      // 直接绑定开始检测按钮事件
       const startDetectionBtn = document.getElementById('startDetection');
       if (startDetectionBtn) {
+        console.log('找到开始检测按钮，绑定点击事件');
         startDetectionBtn.addEventListener('click', function() {
-          console.log('开始检测按钮被点击');
-          // 调用检测初始化函数
-          try {
-            initDetection();
-          } catch (error) {
-            console.error('执行initDetection函数时出错:', error);
-            alert('检测功能执行失败: ' + error.message);
+          console.log('检测按钮被点击');
+          if (typeof initDetection === 'function') {
+            try {
+              initDetection();
+            } catch (err) {
+              console.error('执行检测功能失败:', err);
+              alert('检测功能执行失败: ' + err.message);
+            }
+          } else {
+            console.error('initDetection函数未定义');
+            alert('检测功能未能正确加载');
           }
+        });
+      } else {
+        console.warn('未找到开始检测按钮');
+      }
+      
+      // 上传模板按钮事件直接绑定
+      const uploadTemplateBtn = document.getElementById('uploadTemplateBtn');
+      if (uploadTemplateBtn) {
+        console.log('找到上传模板按钮，绑定点击事件');
+        uploadTemplateBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          console.log('上传模板按钮被点击');
+          if (typeof handleTemplateUpload === 'function') {
+            handleTemplateUpload();
+          } else {
+            console.error('handleTemplateUpload函数未定义');
+            alert('模板上传功能未能正确加载');
+          }
+          return false;
         });
       }
       
-      // 添加切换摄像头按钮事件监听
-      const switchCameraBtn = document.getElementById('switchCamera');
-      if (switchCameraBtn) {
-        switchCameraBtn.addEventListener('click', function() {
-          try {
-            switchCamera();
-          } catch (error) {
-            console.error('切换摄像头失败:', error);
-            alert('切换摄像头失败: ' + error.message);
-          }
-        });
-      }
-      
-      // 添加截图按钮事件监听
-      const captureBtn = document.getElementById('captureBtn');
-      if (captureBtn) {
-        captureBtn.addEventListener('click', function() {
-          try {
-            captureFrame();
-          } catch (error) {
-            console.error('截图失败:', error);
-            alert('截图功能执行失败: ' + error.message);
-          }
-        });
-      }
-      
-      // 添加朗读结果按钮事件监听
-      const speakResultBtn = document.getElementById('speakResultBtn');
-      if (speakResultBtn) {
-        speakResultBtn.addEventListener('click', function() {
-          try {
-            readDetectionResults();
-          } catch (error) {
-            console.error('朗读结果失败:', error);
-            alert('语音朗读功能执行失败: ' + error.message);
-          }
-        });
+      // 检查localStorage是否可用
+      try {
+        localStorage.setItem('test', 'test');
+        localStorage.removeItem('test');
+        console.log('localStorage功能正常');
+      } catch (e) {
+        console.error('localStorage不可用:', e);
+        alert('浏览器存储功能不可用，模板保存功能可能无法使用');
       }
     });
   </script>

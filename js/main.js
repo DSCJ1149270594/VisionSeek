@@ -18,102 +18,129 @@ let isDetecting = false;
 
 // 检查浏览器是否支持getUserMedia
 async function setupCamera() {
-    // 检查是否在安全上下文中运行
-    if (!window.isSecureContext) {
-        throw new Error(
-            '摄像头访问需要安全上下文(HTTPS或localhost)。' +
-            '请使用HTTPS或localhost访问此页面。'
-        );
+    console.log('设置摄像头...');
+    
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('您的浏览器不支持摄像头访问');
+        showToast('您的浏览器不支持摄像头访问，请使用现代浏览器', 'error');
+        return false;
     }
-
-    // 处理不同浏览器的getUserMedia
-    const getUserMedia = navigator.getUserMedia ||
-        navigator.webkitGetUserMedia ||
-        navigator.mozGetUserMedia ||
-        navigator.msGetUserMedia;
-
-    if (getUserMedia) {
-        navigator.mediaDevices = navigator.mediaDevices || {};
-        navigator.mediaDevices.getUserMedia = function (constraints) {
-            return new Promise((resolve, reject) => {
-                getUserMedia.call(navigator, constraints, resolve, reject);
-            });
-        };
+    
+    // 获取视频元素
+    videoElement = document.getElementById('video');
+    
+    if (!videoElement) {
+        console.error('未找到视频元素');
+        showToast('未找到视频元素', 'error');
+        return false;
     }
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error(
-            '浏览器不支持getUserMedia。\n' +
-            '请确保：\n' +
-            '1. 使用最新版本的Chrome、Firefox、Safari或Edge浏览器\n' +
-            '2. 通过HTTPS或localhost访问\n' +
-            '3. 已授予摄像头访问权限'
-        );
+    
+    // 停止任何现有的视频流
+    if (videoElement.srcObject) {
+        const tracks = videoElement.srcObject.getTracks();
+        tracks.forEach(track => track.stop());
     }
-
-    try {
-        // 尝试访问摄像头
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                facingMode: { ideal: 'environment' }
-            },
-            audio: false
-        });
-
-        const video = document.getElementById('videoElement');
-        video.srcObject = stream;
-
-        return new Promise((resolve) => {
-            video.onloadedmetadata = () => {
-                video.style.display = 'block';
-                resolve(video);
-            };
-        });
-    } catch (err) {
-        if (err.name === 'NotAllowedError') {
-            throw new Error('摄像头访问被拒绝。请允许浏览器访问摄像头。');
-        } else if (err.name === 'NotFoundError') {
-            throw new Error('未找到摄像头设备。请确保设备已连接。');
-        } else if (err.name === 'NotReadableError') {
-            throw new Error('摄像头可能被其他应用程序占用。请关闭其他使用摄像头的应用。');
-        } else {
-            throw new Error(`摄像头访问失败: ${err.message}`);
+    
+    // 摄像头配置选项
+    const constraints = {
+        video: {
+            facingMode: 'environment', // 优先使用后置摄像头
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
         }
+    };
+    
+    try {
+        console.log('请求摄像头权限...');
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log('摄像头权限已获得');
+        
+        // 设置视频源
+        videoElement.srcObject = stream;
+        
+        // 等待视频加载
+        return new Promise((resolve) => {
+            videoElement.onloadedmetadata = () => {
+                // 设置Canvas尺寸
+                canvasElement = document.getElementById('canvas');
+                ctx = canvasElement.getContext('2d');
+                
+                // 设置初始Canvas尺寸
+                canvasElement.width = videoElement.videoWidth;
+                canvasElement.height = videoElement.videoHeight;
+                
+                console.log(`视频尺寸: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
+                console.log('摄像头设置完成');
+                
+                showToast('摄像头已准备就绪', 'success');
+                resolve(true);
+            };
+            
+            videoElement.onerror = () => {
+                console.error('视频元素加载出错');
+                showToast('视频加载失败', 'error');
+                resolve(false);
+            };
+            
+            // 启动视频播放
+            videoElement.play().catch(err => {
+                console.error('视频播放失败:', err);
+                showToast('视频播放失败: ' + err.message, 'error');
+                resolve(false);
+            });
+        });
+    } catch (error) {
+        console.error('获取摄像头权限失败:', error);
+        
+        // 根据错误类型提供更具体的错误消息
+        if (error.name === 'NotAllowedError') {
+            showToast('摄像头权限被拒绝，请允许浏览器访问您的摄像头', 'error');
+        } else if (error.name === 'NotFoundError') {
+            showToast('未检测到摄像头设备', 'error');
+        } else {
+            showToast('摄像头访问失败: ' + error.message, 'error');
+        }
+        
+        return false;
     }
 }
 
-// 切换前置和后置摄像头
-async function switchCamera(facingMode) {
-    try {
-        // 停止当前视频流
-        const video = document.getElementById('videoElement');
-        if (video.srcObject) {
-            const tracks = video.srcObject.getTracks();
-            tracks.forEach(track => track.stop());
+// 切换前后摄像头
+async function switchCamera() {
+    if (isDetecting) {
+        // 暂停检测
+        isDetecting = false;
+        
+        // 更新UI
+        document.getElementById('statusIndicator').className = 'status-initializing';
+        document.getElementById('statusText').textContent = '切换摄像头...';
+        
+        try {
+            // 切换摄像头模式
+            currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+            console.log('切换摄像头模式为:', currentFacingMode);
+            
+            // 重新设置摄像头
+            await setupCamera();
+            
+            // 恢复检测
+            isDetecting = true;
+            document.getElementById('statusIndicator').className = 'status-ready';
+            document.getElementById('statusText').textContent = '就绪';
+            showToast('摄像头已切换');
+            
+            // 恢复检测循环
+            detectFrame();
+        } catch (error) {
+            console.error('切换摄像头失败:', error);
+            document.getElementById('statusIndicator').className = 'status-error';
+            document.getElementById('statusText').textContent = '错误: ' + error.message;
+            showToast('切换摄像头失败: ' + error.message, 'danger');
         }
-
-        // 获取新的视频流
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                facingMode: { ideal: facingMode }
-            },
-            audio: false
-        });
-
-        video.srcObject = stream;
-        return new Promise((resolve) => {
-            video.onloadedmetadata = () => {
-                video.style.display = 'block';
-                resolve(video);
-            };
-        });
-    } catch (error) {
-        console.error('切换摄像头失败:', error);
-        return null;
+    } else {
+        // 如果没有在检测状态，只切换模式
+        currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+        showToast('摄像头模式已切换，将在下次启动时生效');
     }
 }
 
@@ -142,22 +169,25 @@ function showToast(message, type = 'success') {
     
     // 创建toast元素
     const toastContainer = document.createElement('div');
-    toastContainer.className = 'toast show align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="d-flex">
-                <div class="toast-body">
-                    <i class="bx bx-${type === 'success' ? 'check' : 'x'}-circle me-2"></i> ${message}
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
+    toastContainer.className = `toast-message toast-${type}`;
+    const icon = type === 'success' ? 'check' : (type === 'danger' ? 'x' : (type === 'warning' ? 'error-circle' : 'info-circle'));
+    
+    toastContainer.innerHTML = `
+        <div class="toast-content">
+            <i class="bx bx-${icon} me-2"></i> ${message}
         </div>
     `;
     
     // 添加到页面
     document.body.appendChild(toastContainer);
     
+    // 显示toast
+    setTimeout(() => toastContainer.classList.add('show'), 10);
+    
     // 3秒后自动移除
     setTimeout(() => {
-        toastContainer.remove();
+        toastContainer.classList.remove('show');
+        setTimeout(() => toastContainer.remove(), 300);
     }, 3000);
 }
 
@@ -420,249 +450,298 @@ window.addEventListener('resize', setupCanvasSize);
 
 // 初始化摄像头并开始检测 - 这是核心功能函数
 async function initDetection() {
-    console.log('initDetection被调用，开始初始化检测');
-    
-    const video = document.getElementById('videoElement');
-    const cameraCanvas = document.getElementById('cameraCanvas');
-    const ctx = cameraCanvas ? cameraCanvas.getContext('2d') : null;
-    const loader = document.getElementById('loader');
-    const detectionInterface = document.getElementById('detection-interface');
-    
-    if (!video || !cameraCanvas || !ctx) {
-        console.error('视频或画布元素未找到');
-        showToast('视频或画布元素未找到，请刷新页面重试', 'danger');
-        return;
-    }
-    
-    // 显示检测界面
-    if (detectionInterface) {
-        detectionInterface.style.display = 'block';
-        window.scrollTo({
-            top: detectionInterface.offsetTop - 80,
-            behavior: 'smooth'
-        });
-    } else {
-        console.error('未找到检测界面元素');
-        showToast('检测界面加载失败，请刷新页面重试', 'danger');
-        return;
-    }
-    
-    // 设置Canvas尺寸
-    setupCanvasSize();
-    
-    if (!isModelLoaded) {
-        if (loader) loader.style.display = 'flex';
-        if (loader && loader.querySelector('p')) loader.querySelector('p').textContent = '正在加载模型...';
-        speakText('正在加载检测模型，请稍候');
+    try {
+        console.log('开始初始化检测系统...');
         
-        try {
-            // 初始化检测器
-            console.log('开始初始化检测器');
-            if (typeof YoloDetector === 'undefined') {
-                throw new Error('检测器模块未加载，请确认yoloDetector.js已正确引入');
-            }
-            
-            detector = new YoloDetector();
-            console.log('检测器实例已创建');
-            
-            // 等待检测器初始化完成
-            await new Promise((resolve, reject) => {
-                console.log('等待检测器初始化');
-                const checkInit = () => {
-                    if (detector && detector.initialized) {
-                        console.log('检测器初始化成功');
-                        resolve();
-                    } else if (detector) {
-                        console.log('检测器初始化中...');
-                        setTimeout(checkInit, 500);
-                    } else {
-                        reject(new Error('检测器实例无效'));
-                    }
-                };
-                checkInit();
-            });
-            
-            // 加载模板图像
-            if (!currentTemplate || !currentTemplate.path) {
-                throw new Error('未选择模板或模板路径无效');
-            }
-            
-            console.log('加载模板图像:', currentTemplate.path);
-            const templatePath = currentTemplate.path;
-            const template = new Image();
-            template.crossOrigin = "Anonymous"; // 添加跨域支持
-            template.src = templatePath;
-            
-            await new Promise((resolve, reject) => {
-                template.onload = async () => {
-                    console.log('模板图像加载成功，获取特征');
-                    try {
-                        const isGotten = await detector.getTemplate(template);
-                        if (isGotten === 0) {
-                            console.log('模板特征获取成功');
-                            resolve();
-                        } else {
-                            console.error('模板特征获取失败');
-                            reject(new Error('模板特征获取失败'));
-                        }
-                    } catch (error) {
-                        console.error('获取模板特征时出错:', error);
-                        reject(error);
-                    }
-                };
-                template.onerror = () => {
-                    console.error('模板图像加载失败');
-                    reject(new Error('模板图像加载失败'));
-                };
-            });
-            
-            isModelLoaded = true;
-            showToast('模型加载成功');
-            speakText('模型加载完成');
-        } catch (error) {
-            console.error('模型加载失败', error);
-            showToast('模型加载失败，请刷新重试: ' + error.message, 'danger');
-            speakText('模型加载失败，请刷新页面重试');
-            if (loader) loader.style.display = 'none';
-            return;
-        } finally {
-            if (loader) loader.style.display = 'none';
+        // 显示加载状态 - 添加检查确保元素存在
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        
+        if (statusIndicator) {
+            statusIndicator.className = 'status-loading';
         }
-    }
-    
-    if (!isDetecting) {
-        // 初始化摄像头
-        try {
-            console.log('开始初始化摄像头');
-            await setupCamera();
-            console.log('摄像头初始化成功');
-            isDetecting = true;
-            detectFrame();
-            showToast('摄像头启动成功');
-            speakText('摄像头已启动，开始检测');
-        } catch (error) {
-            console.error(error.message);
-            isDetecting = false;
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'alert alert-danger';
-            errorDiv.innerHTML = `<i class="bx bx-error-circle me-2"></i> ${error.message}`;
-            
-            if (detectionInterface && detectionInterface.querySelector('.container')) {
-                detectionInterface.querySelector('.container').prepend(errorDiv);
-            }
-            
-            showToast(error.message, 'danger');
-            speakText('摄像头启动失败，' + error.message);
-            return;
+        
+        if (statusText) {
+            statusText.textContent = '加载模型中...';
         }
-    } else {
-        console.log('已经在检测中，不需要重新初始化');
-        showToast('继续检测中');
+        
+        showToast('正在加载TensorFlow.js和模型，请稍候...', 'info');
+        
+        // 确保TensorFlow.js已加载
+        if (typeof tf === 'undefined') {
+            console.error('TensorFlow.js未加载');
+            showToast('TensorFlow.js加载失败，请刷新页面重试', 'error');
+            return false;
+        }
+        
+        console.log('TensorFlow.js已加载，版本:', tf?.version?.tfjs || 'unknown');
+        
+        // 加载COCO-SSD模型或YOLO检测器
+        console.log('开始加载模型...');
+        try {
+            // 首先尝试使用YoloDetector
+            if (typeof YoloDetector === 'function') {
+                detector = new YoloDetector();
+                console.log('YOLO检测器初始化成功');
+            } else if (typeof cocoSsd !== 'undefined') {
+                detector = await cocoSsd.load({
+                    base: 'lite_mobilenet_v2'  // 使用轻量级模型提高性能
+                });
+                console.log('COCO-SSD模型加载成功');
+            } else {
+                throw new Error('未找到可用的检测器模型');
+            }
+        } catch (modelError) {
+            console.error('模型加载失败:', modelError);
+            showToast('模型加载失败: ' + modelError.message, 'error');
+            
+            // 更新UI显示错误 - 添加检查确保元素存在
+            if (statusIndicator) {
+                statusIndicator.className = 'status-error';
+            }
+            if (statusText) {
+                statusText.textContent = '模型加载失败';
+            }
+            return false;
+        }
+        
+        // 确保摄像头已设置
+        const videoElement = document.getElementById('videoElement');
+        if (!videoElement || !videoElement.srcObject) {
+            console.log('摄像头未设置，尝试设置摄像头...');
+            const cameraReady = await setupCamera();
+            if (!cameraReady) {
+                console.error('摄像头设置失败');
+                return false;
+            }
+        }
+        
+        // 更新UI状态 - 添加检查确保元素存在
+        if (statusIndicator) {
+            statusIndicator.className = 'status-ready';
+        }
+        if (statusText) {
+            statusText.textContent = '模型已就绪';
+        }
+        
+        const startButton = document.getElementById('startButton');
+        if (startButton) {
+            startButton.disabled = false;
+            startButton.textContent = '开始检测';
+        }
+        
+        showToast('检测系统初始化完成！', 'success');
+        console.log('检测系统初始化完成');
+        
+        // 显示检测界面
+        const detectionInterface = document.getElementById('detection-interface');
+        if (detectionInterface) {
+            detectionInterface.style.display = 'block';
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('初始化检测时出错:', error);
+        showToast('初始化失败: ' + error.message, 'error');
+        
+        // 更新UI显示错误 - 添加检查确保元素存在
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        
+        if (statusIndicator) {
+            statusIndicator.className = 'status-error';
+        }
+        if (statusText) {
+            statusText.textContent = '初始化失败';
+        }
+        
+        return false;
     }
 }
 
-// 检测帧处理
-let lastFrameTime = 0;
-const minFrameTime = 1000 / 15; // 限制最大帧率为15fps
-
-async function detectFrame(timestamp = 0) {
-    if (!isDetecting) return;
-    
-    const video = document.getElementById('videoElement');
-    const cameraCanvas = document.getElementById('cameraCanvas');
-    const ctx = cameraCanvas ? cameraCanvas.getContext('2d') : null;
-    const resultsList = document.getElementById('resultsList');
-    const detectionCount = document.getElementById('detectionCount');
-    
-    if (!video || !cameraCanvas || !ctx || !resultsList) {
-        console.error('检测所需元素未找到');
-        isDetecting = false;
+// 开始检测
+function startDetection() {
+    if (!detector) {
+        console.error('检测器未初始化，无法开始检测');
+        showToast('检测器未初始化，请先初始化检测系统', 'error');
         return;
     }
     
-    // 控制帧率
-    if (timestamp - lastFrameTime < minFrameTime) {
-        requestAnimationFrame(detectFrame);
+    const videoElement = document.getElementById('videoElement');
+    if (!videoElement || !videoElement.srcObject) {
+        console.error('摄像头未设置，无法开始检测');
+        showToast('摄像头未设置，请检查摄像头权限', 'error');
         return;
     }
     
-    lastFrameTime = timestamp;
-
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        ctx.drawImage(video, 0, 0, cameraCanvas.width, cameraCanvas.height);
-
-        try {
-            if (!detector) {
-                console.error('检测器未初始化');
-                return;
-            }
-            
-            const result = await detector.detect(cameraCanvas);
-
-            // 清除上一帧
-            ctx.clearRect(0, 0, cameraCanvas.width, cameraCanvas.height);
-            ctx.drawImage(video, 0, 0, cameraCanvas.width, cameraCanvas.height);
-
-            // 更新检测计数
-            if (detectionCount) {
-                detectionCount.textContent = result.length;
-            }
-
-            // 绘制检测结果
-            result.forEach(detection => {
-                const x = detection.x * cameraCanvas.width;
-                const y = detection.y * cameraCanvas.height;
-                const w = detection.width * cameraCanvas.width;
-                const h = detection.height * cameraCanvas.height;
-
-                // 绘制边界框
-                ctx.strokeStyle = '#4361ee';
-                ctx.lineWidth = 3;
-                ctx.strokeRect(x - w / 2, y - h / 2, w, h);
-
-                // 绘制标签背景
-                ctx.fillStyle = 'rgba(67, 97, 238, 0.85)';
-                const textWidth = ctx.measureText(detection.class).width;
-                ctx.fillRect(x - w / 2, y - h / 2 - 30, textWidth + 30, 30);
-
-                // 绘制标签
-                ctx.fillStyle = '#ffffff';
-                ctx.font = 'bold 16px Arial';
-                ctx.fillText(detection.class, x - w / 2 + 10, y - h / 2 - 8);
-                
-                // 绘制鼠标悬停效果（仅响应式设计模式下可用）
-                const boxLeft = x - w / 2;
-                const boxTop = y - h / 2;
-                const boxRight = x + w / 2;
-                const boxBottom = y + h / 2;
-                
-                if (window.mouseX && window.mouseY) {
-                    if (window.mouseX >= boxLeft && window.mouseX <= boxRight &&
-                        window.mouseY >= boxTop && window.mouseY <= boxBottom) {
-                        // 当鼠标悬停在检测框上时，显示增强边框
-                        ctx.strokeStyle = '#f72585';
-                        ctx.lineWidth = 4;
-                        ctx.strokeRect(boxLeft, boxTop, w, h);
-                    }
-                }
-            });
-
-            // 更新检测结果显示
-            updateResultsList(result);
-        } catch (error) {
-            console.error('检测过程发生错误:', error);
-        }
-
-        // 内存管理，减少内存泄漏
-        if (tf && tf.memory && tf.memory().numTensors > 100) {
-            tf.disposeVariables();
-            if (tf.nextFrame) {
-                await tf.nextFrame();
-            }
-        }
+    console.log('开始对象检测...');
+    
+    // 更新UI状态
+    const statusIndicator = document.getElementById('statusIndicator');
+    const statusText = document.getElementById('statusText');
+    const startButton = document.getElementById('startButton');
+    const detectionStats = document.getElementById('detectionStats');
+    
+    if (statusIndicator) {
+        statusIndicator.className = 'status-active';
     }
-
+    
+    if (statusText) {
+        statusText.textContent = '检测中...';
+    }
+    
+    if (startButton) {
+        startButton.textContent = '停止检测';
+    }
+    
+    if (detectionStats) {
+        detectionStats.style.display = 'block';
+    }
+    
+    // 开始检测
+    isDetecting = true;
     requestAnimationFrame(detectFrame);
+    
+    showToast('对象检测已启动', 'success');
+}
+
+// 停止检测
+function stopDetection() {
+    console.log('停止对象检测');
+    
+    isDetecting = false;
+    
+    // 更新UI状态
+    const statusIndicator = document.getElementById('statusIndicator');
+    const statusText = document.getElementById('statusText');
+    const startButton = document.getElementById('startButton');
+    
+    if (statusIndicator) {
+        statusIndicator.className = 'status-ready';
+    }
+    
+    if (statusText) {
+        statusText.textContent = '已就绪';
+    }
+    
+    if (startButton) {
+        startButton.textContent = '开始检测';
+    }
+    
+    showToast('对象检测已停止', 'info');
+}
+
+// 执行检测帧
+async function detectFrame() {
+    if (!isDetecting) {
+        console.log('检测已停止');
+        return;
+    }
+
+    try {
+        const video = document.getElementById('video');
+        
+        // 检查视频是否准备好
+        if (!video || !video.srcObject || video.paused || video.ended) {
+            console.warn('视频未准备好，跳过此帧检测');
+            requestAnimationFrame(detectFrame);
+            return;
+        }
+
+        const canvas = document.getElementById('output');
+        const ctx = canvas.getContext('2d');
+        
+        // 确保画布尺寸与视频匹配
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            console.log('画布尺寸已调整为:', canvas.width, 'x', canvas.height);
+        }
+        
+        // 绘制当前视频帧到画布
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // 确保检测器已初始化
+        if (!detector) {
+            console.warn('检测器未初始化，跳过检测');
+            requestAnimationFrame(detectFrame);
+            return;
+        }
+        
+        // 执行对象检测
+        console.log('执行检测...');
+        const predictions = await detector.detect(video);
+        console.log('检测结果:', predictions);
+        
+        // 渲染检测结果
+        renderPredictions(predictions, ctx);
+        
+        // 更新UI
+        updateDetectionStats(predictions);
+        
+        // 继续下一帧检测
+        requestAnimationFrame(detectFrame);
+    } catch (error) {
+        console.error('检测帧时出错:', error);
+        
+        // 更新UI显示错误
+        document.getElementById('statusIndicator').className = 'status-error';
+        document.getElementById('statusText').textContent = '检测错误';
+        
+        // 如果是暂时性错误，尝试继续检测
+        if (isDetecting) {
+            console.log('尝试继续检测...');
+            setTimeout(() => requestAnimationFrame(detectFrame), 1000);
+        }
+    }
+}
+
+// 渲染预测结果
+function renderPredictions(predictions, ctx) {
+    if (!predictions || !ctx) return;
+    
+    // 绘制检测框和标签
+    predictions.forEach(prediction => {
+        // 获取预测数据
+        const [x, y, width, height] = prediction.bbox;
+        const text = `${prediction.class}: ${Math.round(prediction.score * 100)}%`;
+        
+        // 设置绘制样式
+        ctx.strokeStyle = '#FF0000';
+        ctx.lineWidth = 2;
+        ctx.fillStyle = '#FF0000';
+        ctx.font = '18px Arial';
+        
+        // 绘制边界框
+        ctx.beginPath();
+        ctx.rect(x, y, width, height);
+        ctx.stroke();
+        
+        // 绘制文本背景
+        const textWidth = ctx.measureText(text).width;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(x, y - 25, textWidth + 10, 25);
+        
+        // 绘制文本
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(text, x + 5, y - 7);
+    });
+}
+
+// 更新检测统计信息
+function updateDetectionStats(predictions) {
+    if (!predictions) return;
+    
+    // 获取检测的对象数量
+    const objectCount = predictions.length;
+    
+    // 更新UI显示
+    const statsElement = document.getElementById('detectionStats');
+    if (statsElement) {
+        statsElement.textContent = `检测到 ${objectCount} 个对象`;
+        statsElement.style.display = objectCount > 0 ? 'block' : 'none';
+    }
 }
 
 // 更新结果列表
@@ -795,225 +874,292 @@ function highlightDetection(index, detection) {
     speakText(`检测到${detection.class}，置信度${detection.score ? Math.round(detection.score * 100) : 0}%`);
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-  console.log('DOM加载完成，初始化应用');
+// 页面加载完成时初始化
+window.addEventListener('DOMContentLoaded', function() {
+  console.log('DOM内容加载完成，开始初始化');
   
-  // 获取按钮元素
-  const startDetectionBtn = document.getElementById('startDetectionBtn');
-  const frontCameraBtn = document.getElementById('frontCameraBtn');
-  const backCameraBtn = document.getElementById('backCameraBtn');
+  // 立即初始化用户模板
+  loadUserTemplates();
+  console.log('用户模板已加载');
+  
+  // 延迟更新模板显示以确保DOM元素已完全加载
+  setTimeout(() => {
+    updateTemplateDisplay();
+    console.log('模板显示已更新');
+  }, 100);
+  
+  // 获取上传相关元素
   const uploadTemplateBtn = document.getElementById('uploadTemplateBtn');
   const templateUploadForm = document.getElementById('templateUploadForm');
+  const templateImageUpload = document.getElementById('templateImageUpload');
   
-  // 增加按钮事件监听
-  if (startDetectionBtn) {
-    console.log('绑定开始检测按钮事件');
-    startDetectionBtn.addEventListener('click', () => {
-      console.log('开始检测按钮被点击');
-      initDetection(); // 调用检测初始化函数
+  // 绑定上传按钮事件
+  if (uploadTemplateBtn) {
+    console.log('绑定上传按钮事件');
+    uploadTemplateBtn.addEventListener('click', function(event) {
+      event.preventDefault();
+      console.log('上传按钮被点击');
+      handleTemplateUpload();
+      return false;
     });
+  } else {
+    console.error('未找到上传按钮元素');
   }
   
-  // 添加相机切换按钮事件
-  if (frontCameraBtn) {
-    frontCameraBtn.addEventListener('click', () => {
-      switchCamera('user');
-      showToast('已切换至前置摄像头');
-    });
-  }
-  
-  if (backCameraBtn) {
-    backCameraBtn.addEventListener('click', () => {
-      switchCamera('environment');
-      showToast('已切换至后置摄像头');
-    });
-  }
-  
-  // 初始化摄像头
-  async function setupCamera() {
-    const video = document.getElementById('videoElement');
-    if (!video) {
-      throw new Error('未找到视频元素');
-    }
-    
-    // 停止之前的媒体流
-    if (video.srcObject) {
-      const tracks = video.srcObject.getTracks();
-      tracks.forEach(track => track.stop());
-    }
-    
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: currentFacingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        audio: false
-      });
-      
-      video.srcObject = stream;
-      
-      return new Promise((resolve) => {
-        video.onloadedmetadata = () => {
-          video.play().then(() => {
-            resolve(video);
-          }).catch(error => {
-            console.error('视频播放失败:', error);
-            throw new Error('无法播放摄像头视频');
-          });
+  // 绑定图片预览事件
+  if (templateImageUpload) {
+    templateImageUpload.addEventListener('change', function() {
+      const file = this.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const previewContainer = document.getElementById('previewContainer');
+          const imagePreview = document.getElementById('imagePreview');
+          const previewImg = document.getElementById('previewImg');
+          
+          if (previewContainer && imagePreview && previewImg) {
+            previewImg.src = e.target.result;
+            previewContainer.style.display = 'none';
+            imagePreview.style.display = 'block';
+          }
         };
-      });
-    } catch (error) {
-      console.error('摄像头访问失败:', error);
-      if (error.name === 'NotAllowedError') {
-        throw new Error('摄像头访问被拒绝，请授予权限');
-      } else if (error.name === 'NotFoundError') {
-        throw new Error('未找到可用摄像头设备');
-      } else {
-        throw new Error('摄像头启动失败: ' + error.message);
+        reader.readAsDataURL(file);
       }
-    }
-  }
-
-  // 处理模板上传
-  if (templateUploadForm) {
-    templateUploadForm.addEventListener('submit', handleTemplateUpload);
+    });
   }
   
-  // 模板上传处理函数
-  async function handleTemplateUpload(event) {
-    event.preventDefault();
-    
-    const templateName = document.getElementById('templateName');
-    const templateCategory = document.getElementById('templateCategory');
-    const templateDescription = document.getElementById('templateDescription');
-    const templateFile = document.getElementById('templateImageUpload');
-    const uploadTemplateBtn = document.getElementById('uploadTemplateBtn');
-    
-    if (!templateName || !templateCategory || !templateDescription || !templateFile) {
-      showToast('表单元素未找到', 'danger');
-      return;
+  // 图片移除功能
+  const removeImageBtn = document.getElementById('removeImageBtn');
+  if (removeImageBtn) {
+    removeImageBtn.addEventListener('click', function() {
+      const previewContainer = document.getElementById('previewContainer');
+      const imagePreview = document.getElementById('imagePreview');
+      const templateFile = document.getElementById('templateImageUpload');
+      
+      if (previewContainer && imagePreview && templateFile) {
+        previewContainer.style.display = 'block';
+        imagePreview.style.display = 'none';
+        templateFile.value = '';
+      }
+    });
+  }
+  
+  // 检查localStorage
+  try {
+    localStorage.setItem('VisionSeek_Test', 'OK');
+    const testValue = localStorage.getItem('VisionSeek_Test');
+    if (testValue === 'OK') {
+      console.log('localStorage测试成功');
+      localStorage.removeItem('VisionSeek_Test');
+    } else {
+      console.error('localStorage测试失败，存储值不匹配');
     }
+  } catch (e) {
+    console.error('localStorage不可用', e);
+  }
+  
+  console.log('DOM初始化完成');
+});
+
+// 模板上传处理函数
+async function handleTemplateUpload() {
+  console.log('处理模板上传...');
+  
+  const templateName = document.getElementById('templateName');
+  const templateCategory = document.getElementById('templateCategory');
+  const templateDescription = document.getElementById('templateDescription');
+  const templateFile = document.getElementById('templateImageUpload');
+  const uploadTemplateBtn = document.getElementById('uploadTemplateBtn');
+  
+  // 检查必要表单元素
+  if (!templateName) {
+    console.error('未找到模板名称输入框');
+    showToast('表单元素未找到: 模板名称', 'danger');
+    return;
+  }
+  
+  if (!templateFile) {
+    console.error('未找到文件上传输入框');
+    showToast('表单元素未找到: 文件上传', 'danger');
+    return;
+  }
+  
+  // 表单验证
+  if (!templateName.value || templateName.value.trim() === '') {
+    console.log('模板名称为空');
+    showToast('请输入模板名称', 'warning');
+    templateName.focus();
+    return;
+  }
+  
+  if (!templateFile.files || templateFile.files.length === 0) {
+    console.log('未选择文件');
+    showToast('请选择模板图像', 'warning');
+    return;
+  }
+  
+  // 检查文件类型
+  const file = templateFile.files[0];
+  if (!file.type.match('image.*')) {
+    console.log('文件类型不是图像:', file.type);
+    showToast('请选择有效的图像文件', 'danger');
+    return;
+  }
+  
+  // 显示加载状态
+  if (uploadTemplateBtn) {
+    uploadTemplateBtn.disabled = true;
+    uploadTemplateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 上传中...';
+  }
+  
+  try {
+    console.log('开始读取图像文件...');
+    // 读取图像文件
+    const imageUrl = await readFileAsDataURL(file);
+    console.log('图像已读取为Data URL');
     
-    // 表单验证
-    if (!templateName.value.trim()) {
-      showToast('请输入模板名称', 'warning');
-      templateName.focus();
-      return;
-    }
+    const templateCategoryValue = templateCategory ? templateCategory.value : 'other';
+    const templateDescriptionValue = templateDescription ? templateDescription.value : '';
     
-    if (!templateFile.files || templateFile.files.length === 0) {
-      showToast('请选择模板图像', 'warning');
-      return;
-    }
+    // 创建模板对象
+    const template = {
+      id: Date.now().toString(),
+      name: templateName.value.trim(),
+      category: templateCategoryValue,
+      description: templateDescriptionValue,
+      path: imageUrl,
+      date: new Date().toISOString()
+    };
     
-    // 检查文件类型
-    const file = templateFile.files[0];
-    if (!file.type.match('image.*')) {
-      showToast('请选择有效的图像文件', 'danger');
-      return;
-    }
+    console.log('准备保存模板:', template.name);
     
-    // 显示加载状态
-    if (uploadTemplateBtn) {
-      uploadTemplateBtn.disabled = true;
-      uploadTemplateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 上传中...';
-    }
-    
+    // 获取现有模板列表
+    let templates = [];
     try {
-      // 读取图像文件
-      const imageUrl = await readFileAsDataURL(file);
+      const storedTemplates = localStorage.getItem('userTemplates');
+      templates = storedTemplates ? JSON.parse(storedTemplates) : [];
+      console.log(`已获取${templates.length}个现有模板`);
+    } catch (e) {
+      console.error('读取现有模板失败:', e);
+      templates = [];
+    }
+    
+    // 添加新模板
+    templates.push(template);
+    console.log(`添加模板后，总计${templates.length}个模板`);
+    
+    // 直接保存到localStorage
+    try {
+      const templatesJson = JSON.stringify(templates);
+      console.log('准备保存到localStorage的JSON:', templatesJson.substring(0, 100) + '...');
+      localStorage.setItem('userTemplates', templatesJson);
+      console.log('模板已保存到localStorage');
       
-      // 保存模板信息
-      const template = {
-        id: Date.now().toString(),
-        name: templateName.value.trim(),
-        category: templateCategory.value.trim(),
-        description: templateDescription.value.trim(),
-        path: imageUrl,
-        date: new Date().toISOString()
-      };
-      
-      // 保存至本地存储
-      addUserTemplate(template);
+      // 更新全局变量userTemplates
+      userTemplates = templates;
       
       // 更新当前模板
-      setCurrentTemplate(template);
+      currentTemplate = template;
+      console.log('当前模板已更新为:', template.name);
       
       // 显示成功消息
       showToast('模板上传成功', 'success');
       
-      // 关闭模态框
-      const uploadModal = document.getElementById('uploadTemplateModal');
-      if (uploadModal && typeof bootstrap !== 'undefined') {
-        const modal = bootstrap.Modal.getInstance(uploadModal);
-        if (modal) modal.hide();
-      }
-      
-      // 重置表单
-      templateUploadForm.reset();
+      // 重置表单和预览
+      resetUploadForm();
       
       // 更新模板展示
       updateTemplateDisplay();
-      
-    } catch (error) {
-      console.error('模板上传失败', error);
-      showToast('模板上传失败: ' + error.message, 'danger');
-    } finally {
-      // 恢复按钮状态
-      if (uploadTemplateBtn) {
-        uploadTemplateBtn.disabled = false;
-        uploadTemplateBtn.innerHTML = '<i class="bx bx-upload"></i> 上传并创建模板';
-      }
+    } catch (e) {
+      console.error('保存到localStorage失败:', e);
+      showToast('保存模板失败: ' + e.message, 'danger');
+    }
+    
+  } catch (error) {
+    console.error('模板上传失败', error);
+    showToast('模板上传失败: ' + error.message, 'danger');
+  } finally {
+    // 恢复按钮状态
+    if (uploadTemplateBtn) {
+      uploadTemplateBtn.disabled = false;
+      uploadTemplateBtn.innerHTML = '<i class="bx bx-upload"></i> 上传并创建模板';
     }
   }
+}
+
+// 重置上传表单
+function resetUploadForm() {
+  const templateUploadForm = document.getElementById('templateUploadForm');
+  const previewContainer = document.getElementById('previewContainer');
+  const imagePreview = document.getElementById('imagePreview');
   
-  // 将文件转换为Data URL
-  function readFileAsDataURL(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = (e) => reject(new Error('文件读取失败'));
-      reader.readAsDataURL(file);
-    });
+  if (templateUploadForm) {
+    templateUploadForm.reset();
   }
   
-  // 添加用户模板到localStorage
-  function addUserTemplate(template) {
-    const templates = getUserTemplates();
-    templates.push(template);
-    saveUserTemplates(templates);
+  if (previewContainer && imagePreview) {
+    previewContainer.style.display = 'block';
+    imagePreview.style.display = 'none';
   }
   
-  // 保存用户模板到localStorage
-  function saveUserTemplates(templates) {
-    try {
-      localStorage.setItem('userTemplates', JSON.stringify(templates));
-      console.log('模板已保存到localStorage');
-    } catch (error) {
-      console.error('保存模板失败', error);
-      showToast('保存模板失败: ' + error.message, 'danger');
-    }
+  // 更新模板展示
+  updateTemplateDisplay();
+}
+
+// 将文件转换为Data URL
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result);
+    reader.onerror = (e) => reject(new Error('文件读取失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// 添加用户模板到localStorage
+function addUserTemplate(template) {
+  const templates = getUserTemplates();
+  templates.push(template);
+  saveUserTemplates(templates);
+}
+
+// 保存用户模板到localStorage
+function saveUserTemplates(templates) {
+  try {
+    localStorage.setItem('userTemplates', JSON.stringify(templates));
+    console.log('模板已保存到localStorage');
+  } catch (error) {
+    console.error('保存模板失败', error);
+    showToast('保存模板失败: ' + error.message, 'danger');
   }
-  
-  // 获取用户模板列表
-  function getUserTemplates() {
-    try {
-      const templates = localStorage.getItem('userTemplates');
-      return templates ? JSON.parse(templates) : [];
-    } catch (error) {
-      console.error('读取模板失败', error);
-      showToast('读取模板失败，将使用空列表', 'warning');
+}
+
+// 获取用户模板列表
+function getUserTemplates() {
+  try {
+    const templatesJson = localStorage.getItem('userTemplates');
+    console.log('从localStorage获取的模板数据:', templatesJson);
+    if (!templatesJson) {
+      console.log('没有找到已保存的模板数据');
       return [];
     }
+    
+    const templates = JSON.parse(templatesJson);
+    if (!Array.isArray(templates)) {
+      console.error('解析的模板数据不是数组:', templates);
+      return [];
+    }
+    
+    console.log(`成功解析${templates.length}个模板`);
+    return templates;
+  } catch (error) {
+    console.error('读取模板失败', error);
+    showToast('读取模板失败，将使用空列表', 'warning');
+    return [];
   }
+}
 
-  // 初始化应用
-  initApp();
-});
-
-// 初始化应用程序
+// 初始化应用
 async function initApp() {
   console.log('初始化应用程序');
   
@@ -1027,7 +1173,7 @@ async function initApp() {
   setupImagePreview();
   
   // 初始化语音识别
-  initVoiceRecognition();
+  initSpeechRecognition();
 }
 
 // 加载用户模板
@@ -1117,45 +1263,79 @@ function showTemplateDetail(template) {
 
 // 更新模板展示
 function updateTemplateDisplay() {
-  const templatesList = document.getElementById('templatesList');
-  if (!templatesList) return;
-  
-  // 清空现有内容
-  templatesList.innerHTML = '';
-  
-  if (!userTemplates || userTemplates.length === 0) {
-    templatesList.innerHTML = `
-      <div class="text-center p-4">
-        <i class="bx bx-image bx-lg text-muted"></i>
-        <p class="text-muted">未找到模板，请上传新模板</p>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadTemplateModal">
-          <i class="bx bx-plus"></i> 上传模板
-        </button>
-      </div>
-    `;
+  console.log('更新模板展示');
+  const userTemplatesContainer = document.getElementById('userTemplates');
+  if (!userTemplatesContainer) {
+    console.error('未找到用户模板容器 #userTemplates');
     return;
   }
   
-  // 创建模板卡片
-  userTemplates.forEach((template, index) => {
-    const card = document.createElement('div');
-    card.className = 'col-md-4 mb-4';
-    card.innerHTML = `
-      <div class="card template-card ${currentTemplate && currentTemplate.id === template.id ? 'active' : ''}">
-        <div class="template-image-container">
-          <img src="${template.path}" class="card-img-top template-image" alt="${template.name}">
+  // 获取已保存的模板
+  const templates = getUserTemplates();
+  console.log(`加载了${templates.length}个模板`, templates);
+  
+  // 清空当前的内容
+  userTemplatesContainer.innerHTML = '';
+  
+  // 添加占位符
+  if (templates.length === 0) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'col-6 col-md-4 col-lg-3';
+    placeholder.innerHTML = `
+      <div class="template-card template-placeholder shadow-sm rounded-3 hover-lift">
+        <div class="template-thumbnail d-flex align-items-center justify-content-center">
+          <i class="bx bx-image"></i>
         </div>
-        <div class="card-body">
-          <h5 class="card-title">${template.name}</h5>
-          <p class="card-text small text-muted">${template.category}</p>
-          <div class="btn-group w-100">
-            <button class="btn btn-outline-primary btn-sm view-template" data-index="${index}">
-              <i class="bx bx-show"></i> 查看
+        <div class="template-info p-2">
+          <h6 class="template-name">无自定义模板</h6>
+          <p class="template-date small text-muted">请上传您的第一个模板</p>
+        </div>
+        <div class="card-overlay">
+          <div class="d-flex justify-content-center align-items-center h-100">
+            <i class="bx bx-plus-circle"></i>
+          </div>
+        </div>
+      </div>
+    `;
+    userTemplatesContainer.appendChild(placeholder);
+    return;
+  }
+  
+  // 添加用户模板
+  templates.forEach((template, index) => {
+    // 创建模板卡片HTML
+    const templateCard = document.createElement('div');
+    templateCard.className = 'col-6 col-md-4 col-lg-3';
+    templateCard.setAttribute('data-aos', 'fade-up');
+    templateCard.setAttribute('data-aos-delay', (index + 1) * 100);
+    
+    templateCard.innerHTML = `
+      <div class="template-card shadow-sm rounded-3 hover-lift">
+        <div class="template-thumbnail">
+          <img src="${template.path}" alt="${template.name}" class="img-fluid">
+          ${index === 0 ? '<span class="badge bg-success position-absolute top-0 end-0 m-2">最新</span>' : ''}
+        </div>
+        <div class="template-info p-2">
+          <div class="d-flex justify-content-between align-items-center">
+            <h6 class="template-name mb-0">${template.name}</h6>
+            <span class="badge bg-primary">${template.category}</span>
+          </div>
+          <p class="template-date small text-muted mt-1">${template.description || '用户模板'}</p>
+          <div class="template-actions mt-2">
+            <button class="btn btn-sm btn-primary w-100 rounded-pill use-template" data-template-id="${template.id}">
+              <i class="bx bx-camera me-1"></i> 开始检测
             </button>
-            <button class="btn btn-outline-success btn-sm select-template" data-index="${index}">
-              <i class="bx bx-check"></i> 选择
+          </div>
+        </div>
+        <div class="card-overlay">
+          <div class="d-flex justify-content-center align-items-center h-100">
+            <button class="btn btn-sm btn-light rounded-circle me-2 template-view" title="查看详情" data-template-id="${template.id}">
+              <i class="bx bx-search"></i>
             </button>
-            <button class="btn btn-outline-danger btn-sm delete-template" data-index="${index}">
+            <button class="btn btn-sm btn-primary rounded-circle me-2 use-template" title="使用模板" data-template-id="${template.id}">
+              <i class="bx bx-camera"></i>
+            </button>
+            <button class="btn btn-sm btn-danger rounded-circle template-delete" title="删除模板" data-template-id="${template.id}">
               <i class="bx bx-trash"></i>
             </button>
           </div>
@@ -1163,39 +1343,56 @@ function updateTemplateDisplay() {
       </div>
     `;
     
-    templatesList.appendChild(card);
+    userTemplatesContainer.appendChild(templateCard);
   });
   
-  // 绑定卡片上的按钮事件
-  document.querySelectorAll('.view-template').forEach(button => {
-    button.addEventListener('click', function() {
-      const index = parseInt(this.getAttribute('data-index'));
-      showTemplateDetail(userTemplates[index]);
-    });
-  });
-  
-  document.querySelectorAll('.select-template').forEach(button => {
-    button.addEventListener('click', function() {
-      const index = parseInt(this.getAttribute('data-index'));
-      setCurrentTemplate(userTemplates[index]);
-      
-      // 更新活跃状态
-      document.querySelectorAll('.template-card').forEach(card => card.classList.remove('active'));
-      this.closest('.template-card').classList.add('active');
-      
-      showToast('已选择模板: ' + userTemplates[index].name);
-    });
-  });
-  
-  document.querySelectorAll('.delete-template').forEach(button => {
-    button.addEventListener('click', function() {
-      const index = parseInt(this.getAttribute('data-index'));
-      
-      if (confirm(`确定要删除模板 "${userTemplates[index].name}" 吗？`)) {
-        deleteTemplate(index);
+  // 为新添加的模板卡片添加事件监听
+  document.querySelectorAll('.template-view').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const templateId = this.getAttribute('data-template-id');
+      const template = templates.find(t => t.id === templateId);
+      if (template) {
+        showTemplateDetail(template);
       }
     });
   });
+  
+  document.querySelectorAll('.use-template').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const templateId = this.getAttribute('data-template-id');
+      const template = templates.find(t => t.id === templateId);
+      if (template) {
+        setCurrentTemplate(template);
+        console.log('已选择模板:', template.name);
+        showToast(`已选择模板: ${template.name}`);
+        
+        // 滚动到检测界面并开始检测
+        const startDetectionBtn = document.getElementById('startDetection');
+        if (startDetectionBtn) {
+          startDetectionBtn.click();
+        }
+      }
+    });
+  });
+  
+  document.querySelectorAll('.template-delete').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const templateId = this.getAttribute('data-template-id');
+      const template = templates.find(t => t.id === templateId);
+      const index = templates.findIndex(t => t.id === templateId);
+      
+      if (template && index !== -1) {
+        if (confirm(`确定要删除模板 "${template.name}" 吗？`)) {
+          deleteTemplate(index);
+        }
+      }
+    });
+  });
+  
+  console.log('模板展示更新完成');
 }
 
 // 删除模板
