@@ -15,6 +15,8 @@ let currentFacingMode = 'environment'; // 默认使用后置摄像头
 let detector = null;
 let isModelLoaded = false;
 let isDetecting = false;
+let lastVideoElement = null; // 存储最后成功设置的视频元素引用
+let lastCanvasElement = null; // 存储最后成功设置的画布元素引用
 
 // 检查浏览器是否支持getUserMedia
 async function setupCamera() {
@@ -27,7 +29,7 @@ async function setupCamera() {
     }
     
     // 获取视频元素
-    videoElement = document.getElementById('video');
+    const videoElement = document.getElementById('videoElement');
     
     if (!videoElement) {
         console.error('未找到视频元素');
@@ -44,7 +46,7 @@ async function setupCamera() {
     // 摄像头配置选项
     const constraints = {
         video: {
-            facingMode: 'environment', // 优先使用后置摄像头
+            facingMode: currentFacingMode, // 优先使用指定的摄像头
             width: { ideal: 1280 },
             height: { ideal: 720 }
         }
@@ -62,8 +64,15 @@ async function setupCamera() {
         return new Promise((resolve) => {
             videoElement.onloadedmetadata = () => {
                 // 设置Canvas尺寸
-                canvasElement = document.getElementById('canvas');
-                ctx = canvasElement.getContext('2d');
+                const canvasElement = document.getElementById('cameraCanvas');
+                if (!canvasElement) {
+                    console.error('未找到Canvas元素');
+                    showToast('未找到Canvas元素', 'error');
+                    resolve(false);
+                    return;
+                }
+                
+                const ctx = canvasElement.getContext('2d');
                 
                 // 设置初始Canvas尺寸
                 canvasElement.width = videoElement.videoWidth;
@@ -465,12 +474,27 @@ async function initDetection() {
             statusText.textContent = '加载模型中...';
         }
         
+        // 显示加载器
+        const loader = document.getElementById('loader');
+        if (loader) {
+            loader.style.display = 'flex';
+        }
+        
         showToast('正在加载TensorFlow.js和模型，请稍候...', 'info');
+        
+        // 延迟执行，给TensorFlow.js时间加载
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // 确保TensorFlow.js已加载
         if (typeof tf === 'undefined') {
             console.error('TensorFlow.js未加载');
             showToast('TensorFlow.js加载失败，请刷新页面重试', 'error');
+            
+            // 隐藏加载器
+            if (loader) {
+                loader.style.display = 'none';
+            }
+            
             return false;
         }
         
@@ -502,6 +526,12 @@ async function initDetection() {
             if (statusText) {
                 statusText.textContent = '模型加载失败';
             }
+            
+            // 隐藏加载器
+            if (loader) {
+                loader.style.display = 'none';
+            }
+            
             return false;
         }
         
@@ -512,6 +542,12 @@ async function initDetection() {
             const cameraReady = await setupCamera();
             if (!cameraReady) {
                 console.error('摄像头设置失败');
+                
+                // 隐藏加载器
+                if (loader) {
+                    loader.style.display = 'none';
+                }
+                
                 return false;
             }
         }
@@ -530,14 +566,22 @@ async function initDetection() {
             startButton.textContent = '开始检测';
         }
         
-        showToast('检测系统初始化完成！', 'success');
-        console.log('检测系统初始化完成');
-        
         // 显示检测界面
         const detectionInterface = document.getElementById('detection-interface');
         if (detectionInterface) {
             detectionInterface.style.display = 'block';
+            
+            // 滚动到检测界面
+            detectionInterface.scrollIntoView({ behavior: 'smooth' });
         }
+        
+        // 隐藏加载器
+        if (loader) {
+            loader.style.display = 'none';
+        }
+        
+        showToast('检测系统初始化完成！', 'success');
+        console.log('检测系统初始化完成');
         
         return true;
     } catch (error) {
@@ -553,6 +597,12 @@ async function initDetection() {
         }
         if (statusText) {
             statusText.textContent = '初始化失败';
+        }
+        
+        // 隐藏加载器
+        const loader = document.getElementById('loader');
+        if (loader) {
+            loader.style.display = 'none';
         }
         
         return false;
@@ -639,28 +689,34 @@ async function detectFrame() {
     }
 
     try {
-        const video = document.getElementById('video');
+        const videoElement = document.getElementById('videoElement');
         
         // 检查视频是否准备好
-        if (!video || !video.srcObject || video.paused || video.ended) {
+        if (!videoElement || !videoElement.srcObject || videoElement.paused || videoElement.ended) {
             console.warn('视频未准备好，跳过此帧检测');
             requestAnimationFrame(detectFrame);
             return;
         }
 
-        const canvas = document.getElementById('output');
+        const canvas = document.getElementById('cameraCanvas');
+        if (!canvas) {
+            console.warn('未找到Canvas元素，跳过此帧检测');
+            requestAnimationFrame(detectFrame);
+            return;
+        }
+        
         const ctx = canvas.getContext('2d');
         
         // 确保画布尺寸与视频匹配
-        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+        if (canvas.width !== videoElement.videoWidth || canvas.height !== videoElement.videoHeight) {
+            canvas.width = videoElement.videoWidth || 640;
+            canvas.height = videoElement.videoHeight || 480;
             console.log('画布尺寸已调整为:', canvas.width, 'x', canvas.height);
         }
         
         // 绘制当前视频帧到画布
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
         
         // 确保检测器已初始化
         if (!detector) {
@@ -671,7 +727,7 @@ async function detectFrame() {
         
         // 执行对象检测
         console.log('执行检测...');
-        const predictions = await detector.detect(video);
+        const predictions = await detector.detect(videoElement);
         console.log('检测结果:', predictions);
         
         // 渲染检测结果
@@ -680,14 +736,27 @@ async function detectFrame() {
         // 更新UI
         updateDetectionStats(predictions);
         
+        // 将最新的检测结果添加到列表
+        if (predictions && predictions.length > 0) {
+            updateResultsList(predictions);
+        }
+        
         // 继续下一帧检测
         requestAnimationFrame(detectFrame);
     } catch (error) {
         console.error('检测帧时出错:', error);
         
         // 更新UI显示错误
-        document.getElementById('statusIndicator').className = 'status-error';
-        document.getElementById('statusText').textContent = '检测错误';
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        
+        if (statusIndicator) {
+            statusIndicator.className = 'status-error';
+        }
+        
+        if (statusText) {
+            statusText.textContent = '检测错误';
+        }
         
         // 如果是暂时性错误，尝试继续检测
         if (isDetecting) {
@@ -745,52 +814,76 @@ function updateDetectionStats(predictions) {
 }
 
 // 更新结果列表
-function updateResultsList(result) {
+function updateResultsList(predictions) {
     const resultsList = document.getElementById('resultsList');
-    if (!resultsList) return;
+    const detectionCount = document.getElementById('detectionCount');
     
+    if (!resultsList || !Array.isArray(predictions)) return;
+    
+    // 更新检测数量
+    if (detectionCount) {
+        detectionCount.textContent = predictions.length;
+    }
+    
+    // 清空结果列表
     resultsList.innerHTML = '';
     
-    if (result.length === 0) {
-        const noResultItem = document.createElement('div');
-        noResultItem.className = 'detection-item';
-        noResultItem.innerHTML = '<p><i class="bx bx-search"></i> 未检测到物体</p>';
-        resultsList.appendChild(noResultItem);
+    // 如果没有检测结果
+    if (predictions.length === 0) {
+        resultsList.innerHTML = '<div class="text-center text-muted py-3">未检测到物体</div>';
         return;
     }
     
-    result.forEach((detection, index) => {
+    // 添加每个检测结果
+    predictions.forEach((prediction, index) => {
         const item = document.createElement('div');
         item.className = 'detection-item';
         item.setAttribute('data-index', index);
         
-        // 计算置信度百分比
-        const confidence = detection.score ? Math.round(detection.score * 100) : '--';
+        // 从预测中获取类别和置信度
+        let className = prediction.class || prediction.className || '未知物体';
+        let score = prediction.score ? Math.round(prediction.score * 100) : 0;
         
-        // 为不同类别设置不同徽章颜色
-        let badgeColor = 'success';
-        if (confidence < 70) badgeColor = 'warning';
-        if (confidence < 50) badgeColor = 'danger';
-        
+        // 创建检测项的HTML
         item.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center">
-                <h6 class="mb-0">${detection.class}</h6>
-                <span class="badge bg-${badgeColor}">${confidence}%</span>
+            <div class="detection-item-content">
+                <div class="detection-icon">
+                    <i class="bx bx-search-alt"></i>
+                </div>
+                <div class="detection-details">
+                    <h6 class="detection-name">${className}</h6>
+                    <div class="detection-metadata">
+                        <span class="detection-confidence">
+                            <i class="bx bx-check-shield me-1"></i> 置信度: ${score}%
+                        </span>
+                    </div>
+                </div>
+                <div class="detection-action">
+                    <button class="btn btn-sm btn-outline-primary highlight-btn" data-index="${index}">
+                        <i class="bx bx-show"></i>
+                    </button>
+                </div>
             </div>
-            <p><i class="bx bx-map"></i> 位置：x=${detection.x.toFixed(2)}, y=${detection.y.toFixed(2)}</p>
-            <p><i class="bx bx-box"></i> 尺寸：w=${detection.width.toFixed(2)}, h=${detection.height.toFixed(2)}</p>
         `;
         
-        // 添加点击事件
-        item.addEventListener('click', function() {
-            // 高亮相应的检测框
-            highlightDetection(index, detection);
-            
-            // 创建详细信息模态框
-            showDetectionDetail(detection);
-        });
-        
         resultsList.appendChild(item);
+        
+        // 添加高亮显示事件
+        const highlightBtn = item.querySelector('.highlight-btn');
+        if (highlightBtn) {
+            highlightBtn.addEventListener('click', () => {
+                highlightDetection(index, prediction);
+            });
+        }
+        
+        // 添加点击整个项目的事件
+        item.addEventListener('click', () => {
+            document.querySelectorAll('.detection-item').forEach(el => {
+                el.classList.remove('active');
+            });
+            item.classList.add('active');
+            highlightDetection(index, prediction);
+        });
     });
 }
 
@@ -942,6 +1035,35 @@ window.addEventListener('DOMContentLoaded', function() {
         templateFile.value = '';
       }
     });
+  }
+  
+  // 绑定开始/停止检测按钮事件
+  const startButton = document.getElementById('startButton');
+  if (startButton) {
+    console.log('绑定检测按钮事件');
+    startButton.addEventListener('click', function() {
+      if (isDetecting) {
+        stopDetection();
+      } else {
+        startDetection();
+      }
+    });
+  }
+  
+  // 绑定相机控制按钮事件
+  const captureBtn = document.getElementById('captureBtn');
+  if (captureBtn) {
+    captureBtn.addEventListener('click', captureFrame);
+  }
+  
+  const switchCameraBtn = document.getElementById('switchCamera');
+  if (switchCameraBtn) {
+    switchCameraBtn.addEventListener('click', switchCamera);
+  }
+  
+  const speakResultBtn = document.getElementById('speakResultBtn');
+  if (speakResultBtn) {
+    speakResultBtn.addEventListener('click', readDetectionResults);
   }
   
   // 检查localStorage
