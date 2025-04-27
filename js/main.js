@@ -986,11 +986,20 @@ window.addEventListener('DOMContentLoaded', function() {
   const templateUploadForm = document.getElementById('templateUploadForm');
   const templateImageUpload = document.getElementById('templateImageUpload');
   
+  // 阻止表单默认提交
+  if (templateUploadForm) {
+    templateUploadForm.addEventListener('submit', function(event) {
+      event.preventDefault();
+      return false;
+    });
+  }
+  
   // 绑定上传按钮事件
   if (uploadTemplateBtn) {
     console.log('绑定上传按钮事件');
     uploadTemplateBtn.addEventListener('click', function(event) {
       event.preventDefault();
+      event.stopPropagation();
       console.log('上传按钮被点击');
       handleTemplateUpload();
       return false;
@@ -1120,87 +1129,56 @@ async function handleTemplateUpload() {
     return;
   }
   
-  // 检查文件类型
-  const file = templateFile.files[0];
-  if (!file.type.match('image.*')) {
-    console.log('文件类型不是图像:', file.type);
-    showToast('请选择有效的图像文件', 'danger');
-    return;
-  }
-  
   // 显示加载状态
   if (uploadTemplateBtn) {
     uploadTemplateBtn.disabled = true;
-    uploadTemplateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 上传中...';
+    uploadTemplateBtn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i> 处理中...';
   }
   
+  showToast('正在处理图片...', 'info');
+  
   try {
-    console.log('开始读取图像文件...');
-    // 读取图像文件
-    const imageUrl = await readFileAsDataURL(file);
-    console.log('图像已读取为Data URL');
+    const file = templateFile.files[0];
     
-    const templateCategoryValue = templateCategory ? templateCategory.value : 'other';
-    const templateDescriptionValue = templateDescription ? templateDescription.value : '';
+    // 压缩并调整图片尺寸
+    showToast('正在压缩图片...', 'info');
+    const compressedImageUrl = await compressImage(file, 640, 480, 0.7);
     
     // 创建模板对象
-    const template = {
-      id: Date.now().toString(),
+    const newTemplate = {
+      id: 'template_' + Date.now(),
       name: templateName.value.trim(),
-      category: templateCategoryValue,
-      description: templateDescriptionValue,
-      path: imageUrl,
+      category: templateCategory ? templateCategory.value : 'personal',
+      description: templateDescription ? templateDescription.value : '',
+      path: compressedImageUrl,
       date: new Date().toISOString()
     };
     
-    console.log('准备保存模板:', template.name);
-    
-    // 获取现有模板列表
-    let templates = [];
-    try {
-      const storedTemplates = localStorage.getItem('userTemplates');
-      templates = storedTemplates ? JSON.parse(storedTemplates) : [];
-      console.log(`已获取${templates.length}个现有模板`);
-    } catch (e) {
-      console.error('读取现有模板失败:', e);
-      templates = [];
-    }
-    
     // 添加新模板
-    templates.push(template);
-    console.log(`添加模板后，总计${templates.length}个模板`);
+    addUserTemplate(newTemplate);
     
-    // 直接保存到localStorage
-    try {
-      const templatesJson = JSON.stringify(templates);
-      console.log('准备保存到localStorage的JSON:', templatesJson.substring(0, 100) + '...');
-      localStorage.setItem('userTemplates', templatesJson);
-      console.log('模板已保存到localStorage');
-      
-      // 更新全局变量userTemplates
-      userTemplates = templates;
-      
-      // 更新当前模板
-      currentTemplate = template;
-      console.log('当前模板已更新为:', template.name);
-      
-      // 显示成功消息
-      showToast('模板上传成功', 'success');
-      
-      // 重置表单和预览
-      resetUploadForm();
-      
-      // 更新模板展示
-      updateTemplateDisplay();
-    } catch (e) {
-      console.error('保存到localStorage失败:', e);
-      showToast('保存模板失败: ' + e.message, 'danger');
+    // 重置表单
+    resetUploadForm();
+    
+    // 更新当前模板
+    setCurrentTemplate(newTemplate);
+    
+    // 更新模板展示
+    updateTemplateDisplay();
+    
+    // 显示成功消息
+    showToast('模板创建成功！', 'success');
+    
+    // 恢复按钮状态
+    if (uploadTemplateBtn) {
+      uploadTemplateBtn.disabled = false;
+      uploadTemplateBtn.innerHTML = '<i class="bx bx-upload"></i> 上传并创建模板';
     }
     
   } catch (error) {
-    console.error('模板上传失败', error);
+    console.error('模板上传失败:', error);
     showToast('模板上传失败: ' + error.message, 'danger');
-  } finally {
+    
     // 恢复按钮状态
     if (uploadTemplateBtn) {
       uploadTemplateBtn.disabled = false;
@@ -1209,23 +1187,133 @@ async function handleTemplateUpload() {
   }
 }
 
+// 压缩图片函数
+async function compressImage(file, maxWidth, maxHeight, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = function(event) {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = function() {
+        // 计算新尺寸，保持纵横比
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > maxWidth) {
+          height = Math.round(height * (maxWidth / width));
+          width = maxWidth;
+        }
+        
+        if (height > maxHeight) {
+          width = Math.round(width * (maxHeight / height));
+          height = maxHeight;
+        }
+        
+        // 创建Canvas用于压缩
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        
+        // 将图片绘制到Canvas上
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // 导出为压缩的JPEG
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      };
+      img.onerror = function() {
+        reject(new Error('图片加载失败'));
+      };
+    };
+    reader.onerror = function() {
+      reject(new Error('无法读取文件'));
+    };
+  });
+}
+
+// 添加用户模板
+function addUserTemplate(template) {
+  // 获取当前模板
+  let templates = getUserTemplates();
+  
+  // 限制模板数量为10个
+  if (templates.length >= 10) {
+    // 删除最旧的模板
+    templates.shift();
+  }
+  
+  // 添加新模板
+  templates.push(template);
+  
+  // 保存
+  saveUserTemplates(templates);
+}
+
+// 保存用户模板
+function saveUserTemplates(templates) {
+  try {
+    // 转换为JSON字符串
+    const templatesJson = JSON.stringify(templates);
+    
+    // 检查存储大小
+    if (templatesJson.length > 4 * 1024 * 1024) { // 4MB限制
+      console.warn('模板数据过大，正在清理旧数据');
+      
+      // 如果数据太大，只保留最新的5个模板
+      templates = templates.slice(-5);
+      const reducedJson = JSON.stringify(templates);
+      
+      if (reducedJson.length > 4 * 1024 * 1024) {
+        throw new Error('即使减少模板数量，数据仍然过大');
+      }
+      
+      localStorage.setItem('userTemplates', reducedJson);
+      return templates;
+    }
+    
+    localStorage.setItem('userTemplates', templatesJson);
+    return templates;
+  } catch (error) {
+    console.error('保存模板失败:', error);
+    showToast('保存模板失败: ' + error.message, 'danger');
+    
+    // 尝试清理localStorage
+    try {
+      localStorage.clear();
+      localStorage.setItem('userTemplates', JSON.stringify(templates.slice(-2)));
+      showToast('已清理存储空间，只保留最新的2个模板', 'warning');
+      return templates.slice(-2);
+    } catch (clearError) {
+      console.error('清理存储空间失败:', clearError);
+      return [];
+    }
+  }
+}
+
 // 重置上传表单
 function resetUploadForm() {
-  const templateUploadForm = document.getElementById('templateUploadForm');
-  const previewContainer = document.getElementById('previewContainer');
-  const imagePreview = document.getElementById('imagePreview');
-  
-  if (templateUploadForm) {
-    templateUploadForm.reset();
+  try {
+    const templateName = document.getElementById('templateName');
+    const templateCategory = document.getElementById('templateCategory');
+    const templateDescription = document.getElementById('templateDescription');
+    const templateFile = document.getElementById('templateImageUpload');
+    const previewContainer = document.getElementById('previewContainer');
+    const imagePreview = document.getElementById('imagePreview');
+    
+    if (templateName) templateName.value = '';
+    if (templateCategory) templateCategory.value = 'personal';
+    if (templateDescription) templateDescription.value = '';
+    if (templateFile) templateFile.value = '';
+    
+    if (previewContainer) previewContainer.style.display = 'block';
+    if (imagePreview) imagePreview.style.display = 'none';
+    
+    console.log('表单已重置');
+  } catch (error) {
+    console.error('重置表单失败:', error);
   }
-  
-  if (previewContainer && imagePreview) {
-    previewContainer.style.display = 'block';
-    imagePreview.style.display = 'none';
-  }
-  
-  // 更新模板展示
-  updateTemplateDisplay();
 }
 
 // 将文件转换为Data URL
@@ -1238,83 +1326,17 @@ function readFileAsDataURL(file) {
   });
 }
 
-// 添加用户模板到localStorage
-function addUserTemplate(template) {
-  const templates = getUserTemplates();
-  templates.push(template);
-  saveUserTemplates(templates);
-}
-
-// 保存用户模板到localStorage
-function saveUserTemplates(templates) {
-  try {
-    localStorage.setItem('userTemplates', JSON.stringify(templates));
-    console.log('模板已保存到localStorage');
-  } catch (error) {
-    console.error('保存模板失败', error);
-    showToast('保存模板失败: ' + error.message, 'danger');
-  }
-}
-
 // 获取用户模板列表
 function getUserTemplates() {
   try {
     const templatesJson = localStorage.getItem('userTemplates');
-    console.log('从localStorage获取的模板数据:', templatesJson);
     if (!templatesJson) {
-      console.log('没有找到已保存的模板数据');
       return [];
     }
-    
-    const templates = JSON.parse(templatesJson);
-    if (!Array.isArray(templates)) {
-      console.error('解析的模板数据不是数组:', templates);
-      return [];
-    }
-    
-    console.log(`成功解析${templates.length}个模板`);
-    return templates;
+    return JSON.parse(templatesJson);
   } catch (error) {
-    console.error('读取模板失败', error);
-    showToast('读取模板失败，将使用空列表', 'warning');
+    console.error('获取模板失败:', error);
     return [];
-  }
-}
-
-// 初始化应用
-async function initApp() {
-  console.log('初始化应用程序');
-  
-  // 加载用户模板
-  loadUserTemplates();
-  
-  // 更新模板显示
-  updateTemplateDisplay();
-  
-  // 设置图像预览
-  setupImagePreview();
-  
-  // 初始化语音识别
-  initSpeechRecognition();
-}
-
-// 加载用户模板
-function loadUserTemplates() {
-  console.log('加载用户模板');
-  try {
-    const templates = localStorage.getItem('userTemplates');
-    userTemplates = templates ? JSON.parse(templates) : [];
-    
-    if (userTemplates.length > 0) {
-      console.log(`已加载${userTemplates.length}个模板`);
-      // 设置当前模板为最后一个添加的模板
-      setCurrentTemplate(userTemplates[userTemplates.length - 1]);
-    } else {
-      console.log('未找到已保存的模板');
-    }
-  } catch (error) {
-    console.error('加载模板失败', error);
-    userTemplates = [];
   }
 }
 
@@ -1605,4 +1627,41 @@ function setupImagePreview() {
 function showDetectionDetail(detection) {
   // 实现检测结果的详细展示
   console.log('显示检测详情', detection);
+}
+
+// 初始化应用
+async function initApp() {
+  console.log('初始化应用程序');
+  
+  // 加载用户模板
+  loadUserTemplates();
+  
+  // 更新模板显示
+  updateTemplateDisplay();
+  
+  // 设置图像预览
+  setupImagePreview();
+  
+  // 初始化语音识别
+  initSpeechRecognition();
+}
+
+// 加载用户模板
+function loadUserTemplates() {
+  console.log('加载用户模板');
+  try {
+    const templates = localStorage.getItem('userTemplates');
+    userTemplates = templates ? JSON.parse(templates) : [];
+    
+    if (userTemplates.length > 0) {
+      console.log(`已加载${userTemplates.length}个模板`);
+      // 设置当前模板为最后一个添加的模板
+      setCurrentTemplate(userTemplates[userTemplates.length - 1]);
+    } else {
+      console.log('未找到已保存的模板');
+    }
+  } catch (error) {
+    console.error('加载模板失败', error);
+    userTemplates = [];
+  }
 }
