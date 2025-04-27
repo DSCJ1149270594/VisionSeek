@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YOLO11 目标检测</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/loader.css">
+</head>
+
+<body>
+  <div class="app">
+    <div class="header">
+      <h1>YOLO11 目标检测</h1>
+      <p>使用 TensorFlow.js 实现的 YOLO11 目标检测</p>
+    </div>
+
+    <div class="content">
+      <div class="camera-container">
+        <video id="videoElement" autoplay playsinline style="display: none"></video>
+        <canvas id="cameraCanvas"></canvas>
+      </div>
+
+      <div class="detection-results">
+        <h3>检测结果：</h3>
+        <div id="resultsList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="loader" class="wrapper" style="display: none">
+    <div class="spinner"></div>
+    <p>加载模型中...</p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+  <script src="js/yoloDetector.js"></script>
+  <script src="js/main.js"></script>
+</body>
+
+</html>

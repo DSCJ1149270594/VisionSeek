@@ -183,6 +183,39 @@
       font-size: 12px;
       color: #6c757d;
     }
+    
+    /* 目标检测状态栏样式 */
+    .target-detection-status {
+      font-size: 14px;
+      border-left: 3px solid #007bff;
+      transition: all 0.3s ease;
+    }
+    
+    .target-detection-status.found {
+      border-left: 3px solid #28a745;
+      background-color: #e8f5e9 !important;
+    }
+    
+    .target-detection-status.not-found {
+      border-left: 3px solid #dc3545;
+      background-color: #ffebee !important;
+    }
+    
+    /* 目标框高亮样式 */
+    .target-highlight {
+      position: absolute;
+      border: 3px solid #007bff;
+      box-shadow: 0 0 10px rgba(0, 123, 255, 0.5);
+      z-index: 10;
+      pointer-events: none;
+      animation: pulseHighlight 2s infinite;
+    }
+    
+    @keyframes pulseHighlight {
+      0% { box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(0, 123, 255, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(0, 123, 255, 0); }
+    }
   </style>
 </head>
 
@@ -243,9 +276,9 @@
         <div class="col-lg-6" data-aos="fade-right" data-aos-duration="1000">
           <div class="hero-content">
             <div class="badge bg-primary bg-opacity-10 text-primary mb-3 rounded-pill px-3 py-2">
-              <i class="bx bx-code-alt me-1"></i> 智能视觉 AI 平台
+              <i class="bx bx-code-alt me-1"></i> 智能寻物 AI 平台
             </div>
-            <h1>智能视觉检测<br><span class="gradient-text">随时随地</span></h1>
+            <h1>智能寻找物品<br><span class="gradient-text">随时随地</span></h1>
             <p class="lead">VisionSeek利用先进的人工智能技术，提供高精度视觉识别和检测服务，让您轻松实现对象识别、特征匹配等复杂视觉任务。</p>
             <div class="d-flex gap-3 flex-wrap mt-4">
               <button id="startDetection" class="btn btn-primary btn-lg pulse-btn rounded-pill">
@@ -337,6 +370,15 @@
             <div class="detection-status">
               <div id="statusIndicator" class="status-initializing"></div>
               <div id="statusText" class="status-text">未初始化</div>
+            </div>
+          </div>
+          
+          <!-- 添加目标检测状态栏 -->
+          <div id="targetDetectionStatus" class="target-detection-status mt-2 p-2 bg-light rounded">
+            <div class="d-flex align-items-center">
+              <i class="bx bx-search-alt me-2 fs-4"></i>
+              <div id="targetStatusText" class="flex-grow-1">未开始检测目标物品</div>
+              <div id="targetPosition" class="badge bg-primary rounded-pill" style="display: none;">未知位置</div>
             </div>
           </div>
           <div class="mt-4">
@@ -716,20 +758,20 @@
                   <p>有任何问题或建议，欢迎随时联系我们</p>
                   <div class="contact-item">
                     <i class="bx bx-envelope"></i>
-                    <span>example@visionseek.com</span>
+                    <span>1149270594@qq.com</span>
                   </div>
                   <div class="contact-item">
                     <i class="bx bx-phone"></i>
-                    <span>+86 123 4567 8910</span>
+                    <span>+86 131 8615 9001</span>
                   </div>
                   <div class="contact-item">
                     <i class="bx bx-map"></i>
-                    <span>北京市海淀区中关村科技园</span>
+                    <span>陕西省西安市长安区</span>
                   </div>
                   <div class="social-links mt-4">
-                    <a href="#" class="social-link"><i class="bx bxl-github"></i></a>
-                    <a href="#" class="social-link"><i class="bx bxl-twitter"></i></a>
-                    <a href="#" class="social-link"><i class="bx bxl-linkedin"></i></a>
+                    <a href="https://github.com/DSCJ1149270594/VisionSeek" target="_blank"><i class="bx bxl-github"></i></a>
+                    <a href="#"><i class="bx bxl-twitter"></i></a>
+                    <a href="#"><i class="bx bxl-linkedin"></i></a>
                   </div>
                 </div>
               </div>
@@ -762,15 +804,15 @@
       <div class="row">
         <div class="col-md-6">
           <h4><i class="bx bx-camera-movie"></i> VisionSeek</h4>
-          <p>智能视觉检测平台</p>
+          <p>"视界智寻"智能寻物系统</p>
         </div>
         <div class="col-md-6 text-md-end">
           <div class="social-links">
-            <a href="#"><i class="bx bxl-github"></i></a>
+            <a href="https://github.com/DSCJ1149270594/VisionSeek" target="_blank"><i class="bx bxl-github"></i></a>
             <a href="#"><i class="bx bxl-twitter"></i></a>
             <a href="#"><i class="bx bxl-linkedin"></i></a>
           </div>
-          <p class="mt-2">© 2023 VisionSeek. 保留所有权利。</p>
+          <p class="mt-2">© 2025 VisionSeek. 保留所有权利。</p>
         </div>
       </div>
     </div>
@@ -1189,38 +1231,38 @@
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       console.log('DOM已加载，准备初始化UI组件');
-      
-      // 初始化AOS动画库
-      AOS.init({
-        duration: 800,
-        easing: 'ease-in-out',
-        once: true,
-        mirror: false
-      });
-      
-      // 初始化工具提示
-      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-      var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-      });
-      
-      // 回到顶部按钮
-      const scrollToTopBtn = document.getElementById('scrollToTop');
+    
+    // 初始化AOS动画库
+    AOS.init({
+      duration: 800,
+      easing: 'ease-in-out',
+      once: true,
+      mirror: false
+    });
+    
+    // 初始化工具提示
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+      return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // 回到顶部按钮
+    const scrollToTopBtn = document.getElementById('scrollToTop');
       if(scrollToTopBtn) {
-        window.addEventListener('scroll', function() {
-          if (window.scrollY > 300) {
-            scrollToTopBtn.classList.add('active');
-          } else {
-            scrollToTopBtn.classList.remove('active');
-          }
-        });
-        
-        scrollToTopBtn.addEventListener('click', function() {
-          window.scrollTo({
-            top: 0,
-            behavior: 'smooth'
-          });
-        });
+    window.addEventListener('scroll', function() {
+      if (window.scrollY > 300) {
+        scrollToTopBtn.classList.add('active');
+      } else {
+        scrollToTopBtn.classList.remove('active');
+      }
+    });
+    
+    scrollToTopBtn.addEventListener('click', function() {
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    });
       }
       
       // 从模态框中启动检测
@@ -1240,8 +1282,8 @@
         startDetectionBtn.addEventListener('click', function() {
           console.log('检测按钮被点击');
           if (typeof initDetection === 'function') {
-            try {
-              initDetection();
+          try {
+            initDetection();
             } catch (err) {
               console.error('执行检测功能失败:', err);
               alert('检测功能执行失败: ' + err.message);

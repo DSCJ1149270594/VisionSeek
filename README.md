@@ -2,7 +2,9 @@
 
 VisionSeek是一个基于先进计算机视觉技术的智能检测平台，结合了YOLO11目标检测算法和深度特征匹配技术，为用户提供高精度的实时视觉识别服务。
 
-![VisionSeek平台截图](templates/0003.png)
+![VisionSeek平台截图](images/网站首页2.png)
+
+![VisionSeek检测截图](images/检测界面.png)
 
 ## 核心功能
 
@@ -11,6 +13,10 @@ VisionSeek是一个基于先进计算机视觉技术的智能检测平台，结�
 - **前端部署**：基于TensorFlow.js实现，在浏览器端运行，保护用户隐私
 - **多设备支持**：响应式设计，支持PC和移动设备
 - **拍照与分享**：支持捕获检测结果并下载保存
+
+![VisionSeek创建模板](images/创建模版.png)
+
+![VisionSeek核心技术](images/核心技术.png)
 
 ## 技术栈
 
@@ -66,11 +72,13 @@ VisionSeek是一个基于先进计算机视觉技术的智能检测平台，结�
 
 ## 许可证
 
-本项目采用MIT许可证，详情请参阅[LICENSE](LICENSE)文件。
+本项目采用 Apache-2.0 许可证，详情请参阅[LICENSE](LICENSE)文件。
 
 ## 联系我们
 
 如有问题或建议，请通过以下方式联系我们：
 
-- 邮箱：example@visionseek.com
-- 网站：https://www.visionseek.com (即将上线)
+- 邮箱：1149270594@qq.com
+- 网站：https://www.visionseek.cn.com (即将上线)
+
+![VisionSeek关于我们](images/关于我们.png)
